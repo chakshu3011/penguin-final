@@ -22,8 +22,8 @@ const getRandomSpawnPosition = () => {
 const getRandomItemType = () => {
   const random = Math.random();
   if (random < 0.60) return "fish";    // 60% Occurrence
-  if (random < 0.85) return "krill";   // 25% Occurrence (0.60 to 0.85)
-  return "plastic";                    // Remaining balance 
+  if (random < 0.95) return "krill";   // 35% Occurrence (balances out the remaining math)
+  return "plastic";                    // Exactly 5% Occurrence (0.95 to 1.0)
 };
 
 // ==========================================
@@ -163,10 +163,19 @@ function Penguin() {
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
 
-// Sub-models isolated to guarantee separate animation loop parameters
+// Fixed: Added default animation trigger loop to the fish component
 function FishModel() {
-  const { scene } = useGLTF("/models/fish.glb");
-  return <primitive object={scene} scale={0.004} position={[0, 0.1, 0]} />;
+  const group = useRef();
+  const { scene, animations } = useGLTF("/models/fish.glb");
+  const { actions, names } = useAnimations(animations, group);
+
+  useEffect(() => {
+    if (names && names.length > 0 && actions[names[0]]) {
+      actions[names[0]].reset().play();
+    }
+  }, [actions, names]);
+
+  return <primitive ref={group} object={scene} scale={0.004} position={[0, 0.1, 0]} dispose={null} />;
 }
 
 function KrillModel() {
@@ -180,12 +189,12 @@ function KrillModel() {
     }
   }, [actions, names]);
 
-  return <primitive ref={group} object={scene} scale={0.0075} position={[0, 0.05, 0]} />;
+  return <primitive ref={group} object={scene} scale={0.0075} position={[0, 0.05, 0]} dispose={null} />;
 }
 
 function PlasticModel() {
   const { scene } = useGLTF("/models/plastic_water_bottle.glb");
-  return <primitive object={scene} scale={0.15} position={[0, 0.05, 0]} />;
+  return <primitive object={scene} scale={0.15} position={[0, 0.05, 0]} dispose={null} />;
 }
 
 function GameItem({ item, onCollect }) {
@@ -213,11 +222,17 @@ export default function App() {
   const [isARActive, setIsARActive] = useState(false);
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
-  const [currentItem, setCurrentItem] = useState({ type: "fish", position: [0.4, 0.05, 0.4] });
+  
+  // Fixed: Added unique ID to avoid item state synchronization cache issues
+  const [currentItem, setCurrentItem] = useState({ 
+    type: "fish", 
+    position: [0.4, 0.05, 0.4],
+    id: Date.now()
+  });
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60); // Set to 1 Minute
+  const [timeLeft, setTimeLeft] = useState(60); // 1 Minute Timer
   const [isGameOver, setIsGameOver] = useState(false);
 
   const ambience = useRef(null);
@@ -267,9 +282,8 @@ export default function App() {
 
     setParticleTrigger({ id: Date.now(), pos: [...currentItem.position] });
 
-    // Base scoring rules
     if (currentItem.type === "plastic") {
-      setScore((s) => Math.max(0, s - 2)); // Penalty for picking up plastic
+      setScore((s) => Math.max(0, s - 2)); // Subtract points for plastic collection
     } else {
       setScore((s) => s + 1);
     }
@@ -283,10 +297,11 @@ export default function App() {
       footsteps.current.play().catch((e) => console.log(e));
     }
 
-    // Spawn next object with targeted generation properties
+    // Fixed: Assigns a fully unique ID stamp on item generation reset
     setCurrentItem({
       type: getRandomItemType(),
-      position: getRandomSpawnPosition()
+      position: getRandomSpawnPosition(),
+      id: Date.now()
     });
   };
 
@@ -305,7 +320,7 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", backgroundColor: "#0b0f19" }}>
 
-      {/* RESTORED INTRO PAGE */}
+      {/* INTRO PAGE */}
       {!isARActive && (
         <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "20vh", color: "white" }}>
           <h1 style={{ fontSize: "40px", marginBottom: "10px" }}>ICY AR</h1>
@@ -368,7 +383,16 @@ export default function App() {
                   <group position={gamePosition}>
                     <IceFloe />
                     <Penguin />
-                    {!isGameOver && <GameItem item={currentItem} onCollect={collectItem} />}
+                    
+                    {/* Fixed: Unique key explicitly mapping item identification updates */}
+                    {!isGameOver && (
+                      <GameItem 
+                        key={currentItem.id} 
+                        item={currentItem} 
+                        onCollect={collectItem} 
+                      />
+                    )}
+                    
                     <IceParticles trigger={particleTrigger} />
                   </group>
                 </Suspense>
