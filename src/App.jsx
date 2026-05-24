@@ -19,6 +19,9 @@ const getRandomSpawnPosition = () => {
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
+const itemTypes = ["fish", "krill", "plastic"];
+const getRandomItemType = () => itemTypes[Math.floor(Math.random() * itemTypes.length)];
+
 // ==========================================
 // 1. SNOW PARTICLE SYSTEM
 // ==========================================
@@ -128,17 +131,13 @@ function Reticle({ onPlace }) {
 // ==========================================
 useGLTF.preload("/models/penguin.glb");
 useGLTF.preload("/models/fish.glb");
+useGLTF.preload("/models/krill.glb");
+useGLTF.preload("/models/plastic.glb");
 useGLTF.preload("/models/ice_floe.glb");
 
 function IceFloe() {
   const ice = useGLTF("/models/ice_floe.glb");
-  return (
-    <primitive 
-      object={ice.scene} 
-      scale={0.035} 
-      position={[0, -0.01, 0]} 
-    />
-  );
+  return <primitive object={ice.scene} scale={0.035} position={[0, -0.01, 0]} />;
 }
 
 function Penguin() {
@@ -159,15 +158,37 @@ function Penguin() {
 function Fish({ position, onCollect }) {
   const ref = useRef();
   const fish = useGLTF("/models/fish.glb");
-
-  useFrame(() => {
-    if (ref.current) ref.current.rotation.y += 0.02;
-  });
-
+  useFrame(() => { if (ref.current) ref.current.rotation.y += 0.02; });
   return (
     <Interactive onSelect={onCollect}>
       <group ref={ref} position={position}>
         <primitive object={fish.scene} scale={0.0015} position={[0, 0.05, 0]} />
+      </group>
+    </Interactive>
+  );
+}
+
+function Krill({ position, onCollect }) {
+  const ref = useRef();
+  const krill = useGLTF("/models/krill.glb");
+  useFrame(() => { if (ref.current) ref.current.rotation.y += 0.02; });
+  return (
+    <Interactive onSelect={onCollect}>
+      <group ref={ref} position={position}>
+        <primitive object={krill.scene} scale={0.0015} position={[0, 0.05, 0]} />
+      </group>
+    </Interactive>
+  );
+}
+
+function Plastic({ position, onCollect }) {
+  const ref = useRef();
+  const plastic = useGLTF("/models/plastic.glb");
+  useFrame(() => { if (ref.current) ref.current.rotation.y += 0.02; });
+  return (
+    <Interactive onSelect={onCollect}>
+      <group ref={ref} position={position}>
+        <primitive object={plastic.scene} scale={0.0015} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
   );
@@ -180,7 +201,10 @@ export default function App() {
   const [isARActive, setIsARActive] = useState(false);
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
-  const [fishPosition, setFishPosition] = useState([0.4, 0.05, 0.4]);
+  
+  // New State for randomizing items
+  const [currentItem, setCurrentItem] = useState("fish");
+  const [itemPosition, setItemPosition] = useState([0.4, 0.05, 0.4]);
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
@@ -225,14 +249,14 @@ export default function App() {
     return () => clearInterval(timer);
   }, [gamePosition, timeLeft, isGameOver]);
 
-  const collectFish = () => {
+  const collectItem = () => {
     if (isGameOver) return;
 
     if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
       window.navigator.vibrate(50);
     }
 
-    setParticleTrigger({ id: Date.now(), pos: [...fishPosition] });
+    setParticleTrigger({ id: Date.now(), pos: [...itemPosition] });
     setScore((s) => s + 1);
 
     if (collect.current) {
@@ -244,7 +268,9 @@ export default function App() {
       footsteps.current.play().catch((e) => console.log(e));
     }
 
-    setFishPosition(getRandomSpawnPosition());
+    // Spawn the next item randomly
+    setItemPosition(getRandomSpawnPosition());
+    setCurrentItem(getRandomItemType());
   };
 
   const stopGame = () => {
@@ -276,7 +302,7 @@ export default function App() {
           <>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "20px", width: "100%", boxSizing: "border-box" }}>
               <div style={{ color: "white", fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
-                Fish: {score}
+                Score: {score}
               </div>
               {gamePosition && !isGameOver && (
                 <div style={{ color: timeLeft <= 5 ? "#e11d48" : "white", fontSize: "28px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
@@ -297,7 +323,7 @@ export default function App() {
             {isGameOver && (
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", zIndex: 50, color: "white", textAlign: "center", padding: "20px", pointerEvents: "auto" }}>
                 <h1 style={{ fontSize: "45px", marginBottom: "10px", textShadow: "2px 2px 10px rgba(0,0,0,1)", color: "#10b981" }}>TIME'S UP!</h1>
-                <p style={{ fontSize: "22px", marginBottom: "10px" }}>You fed ICY <b>{score}</b> fish!</p>
+                <p style={{ fontSize: "22px", marginBottom: "10px" }}>Your Score: <b>{score}</b></p>
                 <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{getEndMessage()}</p>
                 <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
                   Play Again
@@ -308,29 +334,26 @@ export default function App() {
         )}
       </div>
 
-      {/* FIX: Keep ARButton mounted ALWAYS, use absolute opacity or pointer-events instead of unmounting it */}
-      {overlayElement && (
-        <ARButton
-          sessionInit={{ requiredFeatures: ["hit-test"], optionalFeatures: ["dom-overlay"], domOverlay: { root: overlayElement } }}
-          onClick={() => { if (ambience.current) ambience.current.play().catch(e => console.log(e)); }}
-          style={{ 
-            position: 'absolute', 
-            bottom: '40px', 
-            left: '50%', 
-            transform: 'translateX(-50%)', 
-            padding: '14px 28px', 
-            fontSize: '16px', 
-            fontWeight: 'bold', 
-            borderRadius: '30px', 
-            border: 'none', 
-            background: 'white', 
-            color: 'black', 
-            cursor: 'pointer', 
-            zIndex: 20,
-            display: isARActive ? 'none' : 'block' // Uses styling display toggle instead of conditional component unmounting
-          }}
-        />
-      )}
+      <ARButton
+        sessionInit={{ requiredFeatures: ["hit-test"], optionalFeatures: ["dom-overlay"], domOverlay: { root: overlayElement } }}
+        onClick={() => { if (ambience.current) ambience.current.play().catch(e => console.log(e)); }}
+        style={{ 
+          position: 'absolute', 
+          bottom: '40px', 
+          left: '50%', 
+          transform: 'translateX(-50%)', 
+          padding: '14px 28px', 
+          fontSize: '16px', 
+          fontWeight: 'bold', 
+          borderRadius: '30px', 
+          border: 'none', 
+          background: 'white', 
+          color: 'black', 
+          cursor: 'pointer', 
+          zIndex: 20,
+          display: isARActive ? 'none' : 'block' 
+        }}
+      />
 
       <Canvas style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
         <XR>
@@ -345,7 +368,9 @@ export default function App() {
                   <group position={gamePosition}>
                     <IceFloe />
                     <Penguin />
-                    {!isGameOver && <Fish position={fishPosition} onCollect={collectFish} />}
+                    {!isGameOver && currentItem === "fish" && <Fish position={itemPosition} onCollect={collectItem} />}
+                    {!isGameOver && currentItem === "krill" && <Krill position={itemPosition} onCollect={collectItem} />}
+                    {!isGameOver && currentItem === "plastic" && <Plastic position={itemPosition} onCollect={collectItem} />}
                     <IceParticles trigger={particleTrigger} />
                   </group>
                 )}
