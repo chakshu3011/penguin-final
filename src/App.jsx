@@ -141,7 +141,6 @@ function IceFloe() {
   return <primitive object={ice.scene} scale={0.1} position={[0, -0.01, 0]} />;
 }
 
-// Icy now receives a specific target to walk to (where the user tapped)
 function Penguin({ walkTarget }) {
   const group = useRef();
   const penguin = useGLTF("/models/penguin.glb");
@@ -161,17 +160,15 @@ function Penguin({ walkTarget }) {
     const currentPos = group.current.position;
     const distance = currentPos.distanceTo(target);
 
-    // Only walk if Icy is not at the destination yet
     if (distance > 0.05) {
       const dir = new THREE.Vector3().subVectors(target, currentPos).normalize();
       
-      // FIX: The model was walking backwards. By inverting the lookAt target, we force it to face forward!
       const invertedTarget = new THREE.Vector3().copy(currentPos).sub(dir);
       const targetRotation = new THREE.Matrix4().lookAt(currentPos, invertedTarget, new THREE.Vector3(0, 1, 0));
       const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(targetRotation);
       
-      group.current.quaternion.slerp(targetQuaternion, delta * 8); // Snappier turning
-      group.current.position.add(dir.multiplyScalar(0.4 * delta)); // Walk speed
+      group.current.quaternion.slerp(targetQuaternion, delta * 8); 
+      group.current.position.add(dir.multiplyScalar(0.4 * delta)); 
     }
   });
 
@@ -179,12 +176,23 @@ function Penguin({ walkTarget }) {
 }
 
 function Fish({ position, onCollect }) {
-  const ref = useRef();
+  const group = useRef();
   const fish = useGLTF("/models/fish.glb");
-  useFrame(() => { if (ref.current) ref.current.rotation.y += 0.02; });
+  // FIX: Added animation support for Fish
+  const { actions, names } = useAnimations(fish.animations, group);
+
+  useEffect(() => {
+    if (names && names.length > 0) {
+      const activeAction = actions[names[0]];
+      activeAction.reset().fadeIn(0.25).play();
+    }
+  }, [actions, names]);
+
+  useFrame(() => { if (group.current) group.current.rotation.y += 0.02; });
+  
   return (
     <Interactive onSelect={onCollect}>
-      <group ref={ref} position={position}>
+      <group ref={group} position={position}>
         <primitive object={fish.scene} scale={0.0015} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
@@ -192,12 +200,23 @@ function Fish({ position, onCollect }) {
 }
 
 function Krill({ position, onCollect }) {
-  const ref = useRef();
+  const group = useRef();
   const krill = useGLTF("/models/krill.glb");
-  useFrame(() => { if (ref.current) ref.current.rotation.y += 0.02; });
+  // FIX: Added animation support for Krill
+  const { actions, names } = useAnimations(krill.animations, group);
+
+  useEffect(() => {
+    if (names && names.length > 0) {
+      const activeAction = actions[names[0]];
+      activeAction.reset().fadeIn(0.25).play();
+    }
+  }, [actions, names]);
+
+  useFrame(() => { if (group.current) group.current.rotation.y += 0.02; });
+  
   return (
     <Interactive onSelect={onCollect}>
-      <group ref={ref} position={position}>
+      <group ref={group} position={position}>
         <primitive object={krill.scene} scale={2} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
@@ -225,16 +244,20 @@ export default function App() {
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
   
-  // Two separate positions: The Item's location, and where Icy is currently walking
   const [currentItem, setCurrentItem] = useState("fish");
   const [itemPosition, setItemPosition] = useState([0.6, 0.05, 0.6]); 
-  const [penguinWalkTarget, setPenguinWalkTarget] = useState([0, 0, 0]); // Starts at center
+  const [penguinWalkTarget, setPenguinWalkTarget] = useState([0, 0, 0]); 
   
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
+  // FIX: Split score and individual object tracking
   const [score, setScore] = useState(0);
+  const [fishCount, setFishCount] = useState(0);
+  const [krillCount, setKrillCount] = useState(0);
+  
   const [timeLeft, setTimeLeft] = useState(30);
-  const [isGameOver, setIsGameOver] = useState(false);
+  // FIX: Status can now be "playing", "win", "lose", or "timeup"
+  const [gameStatus, setGameStatus] = useState("playing");
 
   const ambience = useRef(null);
   const collect = useRef(null);
@@ -262,27 +285,26 @@ export default function App() {
 
   useEffect(() => {
     let timer;
-    if (gamePosition && timeLeft > 0 && !isGameOver) {
+    if (gamePosition && timeLeft > 0 && gameStatus === "playing") {
       timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    } else if (timeLeft === 0 && !isGameOver) {
-      setIsGameOver(true);
+    } else if (timeLeft === 0 && gameStatus === "playing") {
+      setGameStatus("timeup");
       if (penguinChirp.current) {
         penguinChirp.current.currentTime = 0;
         penguinChirp.current.play().catch((e) => console.log(e));
       }
     }
     return () => clearInterval(timer);
-  }, [gamePosition, timeLeft, isGameOver]);
+  }, [gamePosition, timeLeft, gameStatus]);
 
   const collectItem = () => {
-    if (isGameOver) return;
+    if (gameStatus !== "playing") return;
 
     if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
       window.navigator.vibrate(50);
     }
 
     setParticleTrigger({ id: Date.now(), pos: [...itemPosition] });
-    setScore((s) => s + 1);
 
     if (collect.current) {
       collect.current.currentTime = 0;
@@ -293,10 +315,36 @@ export default function App() {
       footsteps.current.play().catch((e) => console.log(e));
     }
 
-    // 1. Tell Icy to walk to the position of the item we JUST clicked
+    // Tell Icy to walk to the tapped item
     setPenguinWalkTarget([...itemPosition]);
 
-    // 2. Spawn the new item somewhere else so the user can look for it
+    // FIX: Core Game Logic (Scores and Win/Loss)
+    if (currentItem === "plastic") {
+      setGameStatus("lose");
+      if (penguinChirp.current) {
+        penguinChirp.current.currentTime = 0;
+        penguinChirp.current.play().catch((e) => console.log(e));
+      }
+      return; // Stop here, do not spawn a new item!
+    } else if (currentItem === "fish") {
+      const newFishCount = fishCount + 1;
+      setFishCount(newFishCount);
+      setScore((s) => s + 1); // Fish = 1 point
+      if (newFishCount >= 10) {
+        setGameStatus("win");
+        return;
+      }
+    } else if (currentItem === "krill") {
+      const newKrillCount = krillCount + 1;
+      setKrillCount(newKrillCount);
+      setScore((s) => s + 2); // Krill = 2 points
+      if (newKrillCount >= 5) {
+        setGameStatus("win");
+        return;
+      }
+    }
+
+    // Spawn the next item
     setItemPosition(getRandomSpawnPosition());
     setCurrentItem(getRandomItemType());
   };
@@ -306,12 +354,15 @@ export default function App() {
     window.location.reload();
   };
 
-  const getEndMessage = () => {
-    if (score === 0) return "ICY is sad and starving! 😭";
-    if (score <= 3) return "ICY survived, but is still hungry! 🐟";
-    if (score <= 7) return "ICY is well-fed and happy! 🐧";
-    return "ICY is stuffed and ready to dance! 🎉";
+  // Helper to dynamically render the correct Game Over screen
+  const getEndScreenData = () => {
+    if (gameStatus === "win") return { title: "YOU WIN!", color: "#10b981", msg: "ICY is stuffed and happy! 🎉" };
+    if (gameStatus === "lose") return { title: "GAME OVER", color: "#e11d48", msg: "Oh no! ICY ate plastic! 😭" };
+    if (gameStatus === "timeup") return { title: "TIME'S UP!", color: "#f59e0b", msg: "ICY survived, but is still hungry! 🐟" };
+    return { title: "", color: "", msg: "" };
   };
+
+  const endData = getEndScreenData();
 
   return (
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", backgroundColor: "#0b0f19" }}>
@@ -330,7 +381,7 @@ export default function App() {
               <div style={{ color: "white", fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
                 Score: {score}
               </div>
-              {gamePosition && !isGameOver && (
+              {gamePosition && gameStatus === "playing" && (
                 <div style={{ color: timeLeft <= 5 ? "#e11d48" : "white", fontSize: "28px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
                   00:{timeLeft.toString().padStart(2, '0')}
                 </div>
@@ -346,11 +397,12 @@ export default function App() {
               </div>
             )}
 
-            {isGameOver && (
+            {gameStatus !== "playing" && (
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", zIndex: 50, color: "white", textAlign: "center", padding: "20px", pointerEvents: "auto" }}>
-                <h1 style={{ fontSize: "45px", marginBottom: "10px", textShadow: "2px 2px 10px rgba(0,0,0,1)", color: "#10b981" }}>TIME'S UP!</h1>
-                <p style={{ fontSize: "22px", marginBottom: "10px" }}>Your Score: <b>{score}</b></p>
-                <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{getEndMessage()}</p>
+                <h1 style={{ fontSize: "45px", marginBottom: "10px", textShadow: "2px 2px 10px rgba(0,0,0,1)", color: endData.color }}>{endData.title}</h1>
+                <p style={{ fontSize: "22px", marginBottom: "10px" }}>Final Score: <b>{score}</b></p>
+                <p style={{ fontSize: "16px", marginBottom: "10px", color: "#d1d5db" }}>Fish: {fishCount}/10 | Krill: {krillCount}/5</p>
+                <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{endData.msg}</p>
                 <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
                   Play Again
                 </button>
@@ -393,11 +445,10 @@ export default function App() {
                 ) : (
                   <group position={gamePosition}>
                     <IceFloe />
-                    {/* Pass the separate walk target down to Icy */}
                     <Penguin walkTarget={penguinWalkTarget} />
-                    {!isGameOver && currentItem === "fish" && <Fish position={itemPosition} onCollect={collectItem} />}
-                    {!isGameOver && currentItem === "krill" && <Krill position={itemPosition} onCollect={collectItem} />}
-                    {!isGameOver && currentItem === "plastic" && <Plastic position={itemPosition} onCollect={collectItem} />}
+                    {gameStatus === "playing" && currentItem === "fish" && <Fish position={itemPosition} onCollect={collectItem} />}
+                    {gameStatus === "playing" && currentItem === "krill" && <Krill position={itemPosition} onCollect={collectItem} />}
+                    {gameStatus === "playing" && currentItem === "plastic" && <Plastic position={itemPosition} onCollect={collectItem} />}
                     <IceParticles trigger={particleTrigger} />
                   </group>
                 )}
