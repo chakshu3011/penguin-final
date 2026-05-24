@@ -89,14 +89,13 @@ function IceParticles({ trigger }) {
 }
 
 // ==========================================
-// 2. TARGET RETICLE (FIXED NULL CRASH)
+// 2. TARGET RETICLE (FIXED: UNMOUNT TIMEOUT)
 // ==========================================
 function Reticle({ onPlace }) {
   const reticleRef = useRef();
   const { camera } = useThree();
 
   useHitTest((hitMatrix, hit) => {
-    // CRITICAL FIX: Added 'reticleRef.current' check to prevent AR camera fatal crashes on unmount
     if (hit && reticleRef.current) {
       hitMatrix.decompose(
         reticleRef.current.position,
@@ -108,7 +107,6 @@ function Reticle({ onPlace }) {
 
   return (
     <Interactive onSelect={() => {
-      // Safety check inside select action
       if (!reticleRef.current) return;
 
       const spawnPos = reticleRef.current.position.clone();
@@ -122,7 +120,10 @@ function Reticle({ onPlace }) {
         spawnPos.z += (dirZ / distance) * push;
       }
 
-      onPlace(spawnPos);
+      // CRITICAL FIX: Defer the unmounting so WebXR can finish its internal click event cleanly
+      setTimeout(() => {
+        onPlace(spawnPos);
+      }, 50); 
     }}>
       <mesh ref={reticleRef} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.15, 0.2, 32]} />
@@ -167,7 +168,7 @@ function Penguin() {
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
 
-// Visibility Controlled Sub-models (Prevents GPU Memory Leaks)
+// Visibility Controlled Sub-models
 function FishModel({ visible }) {
   const group = useRef();
   const { scene, animations } = useGLTF("/models/fish.glb");
