@@ -15,7 +15,7 @@ function XRTracker({ onXRStart }) {
 
 const getRandomSpawnPosition = () => {
   const angle = Math.random() * Math.PI * 2;
-  const radius = 0.5 + Math.random() * 0.6; // Stays safely within the expanded ice floe radius
+  const radius = 0.5 + Math.random() * 0.6;
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
@@ -29,7 +29,6 @@ function IceParticles({ trigger }) {
   useEffect(() => {
     if (!trigger.id) return;
     
-    // Create a burst of 15 ice shards at the fish's collection site
     const count = 15;
     const temp = [];
     for (let i = 0; i < count; i++) {
@@ -37,10 +36,10 @@ function IceParticles({ trigger }) {
         pos: [...trigger.pos],
         vel: [
           (Math.random() - 0.5) * 0.5,
-          Math.random() * 0.6 + 0.2, // Upward burst velocity
+          Math.random() * 0.6 + 0.2,
           (Math.random() - 0.5) * 0.5
         ],
-        life: 1.0 // Lifespan multiplier
+        life: 1.0
       });
     }
     setParticles(temp);
@@ -55,7 +54,7 @@ function IceParticles({ trigger }) {
         p.pos[0] += p.vel[0] * delta;
         p.pos[1] += p.vel[1] * delta;
         p.pos[2] += p.vel[2] * delta;
-        p.vel[1] -= 0.98 * delta; // Simulated gravity pulling shards down
+        p.vel[1] -= 0.98 * delta;
         p.life -= delta * 2.0;
         return p;
       })
@@ -104,13 +103,10 @@ function Reticle({ onPlace }) {
       if (!reticleRef.current) return;
       
       const spawnPos = reticleRef.current.position.clone();
-      
-      // Calculate directional vector directly from camera to the target point
       const dirX = spawnPos.x - camera.position.x;
       const dirZ = spawnPos.z - camera.position.z;
       const distance = Math.sqrt(dirX * dirX + dirZ * dirZ);
 
-      // Force-align placement forward away from user's viewpoint to counter 180 flips
       if (distance < 1.4) {
         const push = 1.4 - distance;
         spawnPos.x += (dirX / distance) * push;
@@ -139,7 +135,7 @@ function IceFloe() {
   return (
     <primitive 
       object={ice.scene} 
-      scale={0.035} // Expanded scale so the igloo and snowy layout wrap the zone beautifully
+      scale={0.035} 
       position={[0, -0.01, 0]} 
     />
   );
@@ -152,7 +148,6 @@ function Penguin() {
 
   useEffect(() => {
     if (names && names.length > 0) {
-      // Plays the first active track found inside the skeleton file
       const activeAction = actions[names[0]];
       activeAction.reset().fadeIn(0.25).play();
     }
@@ -233,14 +228,11 @@ export default function App() {
   const collectFish = () => {
     if (isGameOver) return;
 
-    // Secure Android Haptic Trigger immediately inside user event scope
     if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
       window.navigator.vibrate(50);
     }
 
-    // Trigger particle burst at the current fish position
     setParticleTrigger({ id: Date.now(), pos: [...fishPosition] });
-
     setScore((s) => s + 1);
 
     if (collect.current) {
@@ -270,7 +262,7 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", backgroundColor: "#0b0f19" }}>
       
-      {/* RESTORED INTRO PAGE */}
+      {/* INTRO SCREEN */}
       {!isARActive && (
         <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "25vh", color: "white", fontFamily: "sans-serif" }}>
           <h1 style={{ fontSize: "42px", letterSpacing: "2px", marginBottom: "10px" }}>ICY AR</h1>
@@ -279,7 +271,6 @@ export default function App() {
       )}
 
       {/* AR HUD VIEW */}
-      {/* FIX: display is ALWAYS 'flex' so the AR session doesn't crash on start */}
       <div ref={setOverlayElement} style={{ position: "absolute", zIndex: 10, width: "100%", height: "100%", pointerEvents: "none", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         {isARActive && (
           <>
@@ -317,11 +308,27 @@ export default function App() {
         )}
       </div>
 
-      {overlayElement && !isARActive && (
+      {/* FIX: Keep ARButton mounted ALWAYS, use absolute opacity or pointer-events instead of unmounting it */}
+      {overlayElement && (
         <ARButton
           sessionInit={{ requiredFeatures: ["hit-test"], optionalFeatures: ["dom-overlay"], domOverlay: { root: overlayElement } }}
           onClick={() => { if (ambience.current) ambience.current.play().catch(e => console.log(e)); }}
-          style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', padding: '14px 28px', fontSize: '16px', fontWeight: 'bold', borderRadius: '30px', border: 'none', background: 'white', color: 'black', cursor: 'pointer', zIndex: 20 }}
+          style={{ 
+            position: 'absolute', 
+            bottom: '40px', 
+            left: '50%', 
+            transform: 'translateX(-50%)', 
+            padding: '14px 28px', 
+            fontSize: '16px', 
+            fontWeight: 'bold', 
+            borderRadius: '30px', 
+            border: 'none', 
+            background: 'white', 
+            color: 'black', 
+            cursor: 'pointer', 
+            zIndex: 20,
+            display: isARActive ? 'none' : 'block' // Uses styling display toggle instead of conditional component unmounting
+          }}
         />
       )}
 
