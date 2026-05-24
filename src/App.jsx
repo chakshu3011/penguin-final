@@ -19,11 +19,11 @@ const getRandomSpawnPosition = () => {
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
-// FIX: Weighted probability spawn
+// FIX: Updated Weighted probability spawn (65 / 30 / 10)
 const getRandomItemType = () => {
-  const rand = Math.random() * 100;
-  if (rand < 60) return "fish";     // 60% chance
-  if (rand < 90) return "squid";    // 30% chance
+  const rand = Math.random() * 105; // Total weight of 105
+  if (rand < 65) return "fish";     // 65% chance
+  if (rand < 95) return "squid";    // 30% chance
   return "plastic";                 // 10% chance
 };
 
@@ -197,7 +197,7 @@ function Fish({ position, onCollect }) {
   return (
     <Interactive onSelect={onCollect}>
       <group ref={group} position={position}>
-        <primitive object={fish.scene} scale={0.0015} position={[0, 0.05, 0]} />
+        <primitive object={fish.scene} scale={0.015} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
   );
@@ -220,7 +220,7 @@ function Squid({ position, onCollect }) {
   return (
     <Interactive onSelect={onCollect}>
       <group ref={group} position={position}>
-        <primitive object={squid.scene} scale={2} position={[0, 0.05, 0]} />
+        <primitive object={squid.scene} scale={0.015} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
   );
@@ -247,6 +247,9 @@ export default function App() {
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
   
+  // FIX: Added showThanks state for the new Close button feature
+  const [showThanks, setShowThanks] = useState(false);
+
   const [currentItem, setCurrentItem] = useState("fish");
   const [itemPosition, setItemPosition] = useState([0.6, 0.05, 0.6]); 
   const [penguinWalkTarget, setPenguinWalkTarget] = useState([0, 0, 0]); 
@@ -257,7 +260,6 @@ export default function App() {
   const [fishCount, setFishCount] = useState(0);
   const [squidCount, setSquidCount] = useState(0);
   
-  // FIX: Increased to 60 seconds
   const [timeLeft, setTimeLeft] = useState(60);
   const [gameStatus, setGameStatus] = useState("playing");
 
@@ -300,7 +302,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [gamePosition, timeLeft, gameStatus]);
 
-  // FIX: Safely despawn plastic after 5 seconds if untouched
+  // Safely despawn plastic after 5 seconds if untouched
   useEffect(() => {
     let plasticTimeout;
     if (gameStatus === "playing" && currentItem === "plastic") {
@@ -380,12 +382,11 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", backgroundColor: "#0b0f19" }}>
       
-      {!isARActive && (
+      {!isARActive && !showThanks && (
         <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "20vh", color: "white", fontFamily: "sans-serif" }}>
           <h1 style={{ fontSize: "42px", letterSpacing: "2px", marginBottom: "10px" }}>ICY AR</h1>
           <p style={{ fontSize: "18px", opacity: 0.8 }}>An Augmented Reality Experience</p>
           
-          {/* FIX: Added Instruction Text */}
           <div style={{ marginTop: "40px", padding: "20px", background: "rgba(255,255,255,0.1)", borderRadius: "15px", border: "1px solid rgba(255,255,255,0.3)", textAlign: "center", width: "80%", maxWidth: "350px" }}>
             <h3 style={{ margin: "0 0 10px 0", color: "#60a5fa" }}>How to Play</h3>
             <p style={{ margin: "5px 0", fontSize: "15px" }}>🐟 Collect <b>10 Fish</b> OR</p>
@@ -426,9 +427,16 @@ export default function App() {
                 <p style={{ fontSize: "22px", marginBottom: "10px" }}>Final Score: <b>{score}</b></p>
                 <p style={{ fontSize: "16px", marginBottom: "10px", color: "#d1d5db" }}>Fish: {fishCount}/10 | Squid: {squidCount}/5</p>
                 <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{endData.msg}</p>
-                <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
-                  Play Again
-                </button>
+                
+                {/* FIX: Replaced single button with Play Again / Close buttons */}
+                <div style={{ display: "flex", gap: "20px" }}>
+                  <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
+                    Play Again
+                  </button>
+                  <button onClick={() => setShowThanks(true)} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#4b5563", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
+                    Close
+                  </button>
+                </div>
               </div>
             )}
           </>
@@ -452,7 +460,7 @@ export default function App() {
           color: 'black', 
           cursor: 'pointer', 
           zIndex: 20,
-          display: isARActive ? 'none' : 'block' 
+          display: isARActive || showThanks ? 'none' : 'block' 
         }}
       />
 
@@ -460,7 +468,7 @@ export default function App() {
         <XR>
           <Suspense fallback={null}>
             <XRTracker onXRStart={setIsARActive} />
-            {isARActive && (
+            {isARActive && !showThanks && (
               <>
                 <ambientLight intensity={2.5} />
                 {!gamePosition ? (
@@ -480,6 +488,21 @@ export default function App() {
           </Suspense>
         </XR>
       </Canvas>
+
+      {/* FIX: Added the new Thank You Overlay */}
+      {showThanks && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0f172a", zIndex: 100, color: "white", textAlign: "center", padding: "30px", pointerEvents: "auto" }}>
+          <h1 style={{ fontSize: "36px", marginBottom: "20px", color: "#60a5fa", textShadow: "0 2px 10px rgba(96, 165, 250, 0.3)" }}>
+            Thank you for Playing!
+          </h1>
+          <p style={{ fontSize: "20px", lineHeight: "1.6", maxWidth: "450px", marginBottom: "40px", color: "#e2e8f0" }}>
+            Plastic pollution threatens the food chain Emperor Penguins rely on. Thanks for helping Icy find a safe, plastic-free meal. Let's protect our oceans!
+          </p>
+          <p style={{ fontSize: "14px", color: "#9ca3af", marginTop: "20px", fontStyle: "italic" }}>
+            You can safely close this tab now.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
