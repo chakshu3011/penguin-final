@@ -175,7 +175,7 @@ function Krill({ position, onCollect }) {
   return (
     <Interactive onSelect={onCollect}>
       <group ref={ref} position={position}>
-        <primitive object={krill.scene} scale={0.015} position={[0, 0.05, 0]} />
+        <primitive object={krill.scene} scale={0.15} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
   );
