@@ -19,6 +19,13 @@ const getRandomSpawnPosition = () => {
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
+const getRandomItemType = () => {
+  const random = Math.random();
+  if (random < 0.60) return "fish";    // 60% Occurrence
+  if (random < 0.85) return "krill";   // 25% Occurrence (0.60 to 0.85)
+  return "plastic";                    // Remaining balance 
+};
+
 // ==========================================
 // 1. SNOW PARTICLE SYSTEM
 // ==========================================
@@ -29,7 +36,6 @@ function IceParticles({ trigger }) {
   useEffect(() => {
     if (!trigger.id) return;
     
-    // Create a burst of 15 ice shards at the fish's collection site
     const count = 15;
     const temp = [];
     for (let i = 0; i < count; i++) {
@@ -37,10 +43,10 @@ function IceParticles({ trigger }) {
         pos: [...trigger.pos],
         vel: [
           (Math.random() - 0.5) * 0.5,
-          Math.random() * 0.6 + 0.2, // Upward burst velocity
+          Math.random() * 0.6 + 0.2, 
           (Math.random() - 0.5) * 0.5
         ],
-        life: 1.0 // Lifespan multiplier
+        life: 1.0 
       });
     }
     setParticles(temp);
@@ -55,7 +61,7 @@ function IceParticles({ trigger }) {
         p.pos[0] += p.vel[0] * delta;
         p.pos[1] += p.vel[1] * delta;
         p.pos[2] += p.vel[2] * delta;
-        p.vel[1] -= 0.98 * delta; // Simulated gravity pulling shards down
+        p.vel[1] -= 0.98 * delta; 
         p.life -= delta * 2.0;
         return p;
       })
@@ -106,7 +112,6 @@ function Reticle({ onPlace }) {
       const dirZ = spawnPos.z - camera.position.z;
       const distance = Math.sqrt(dirX * dirX + dirZ * dirZ);
 
-      // Force-align placement forward away from user's viewpoint to counter 180 flips
       if (distance < 1.4) {
         const push = 1.4 - distance;
         spawnPos.x += (dirX / distance) * push;
@@ -128,6 +133,8 @@ function Reticle({ onPlace }) {
 // ==========================================
 useGLTF.preload("/models/penguin.glb");
 useGLTF.preload("/models/fish.glb");
+useGLTF.preload("/models/krill_antartic.glb");
+useGLTF.preload("/models/plastic_water_bottle.glb");
 useGLTF.preload("/models/ice_floe.glb");
 
 function IceFloe() {
@@ -135,7 +142,7 @@ function IceFloe() {
   return (
     <primitive 
       object={ice.scene} 
-      scale={0.035} // Expanded scale so the igloo and snowy layout wrap the zone beautifully
+      scale={0.035} 
       position={[0, -0.01, 0]} 
     />
   );
@@ -156,9 +163,33 @@ function Penguin() {
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
 
-function Fish({ position, onCollect }) {
+// Sub-models isolated to guarantee separate animation loop parameters
+function FishModel() {
+  const { scene } = useGLTF("/models/fish.glb");
+  return <primitive object={scene} scale={0.004} position={[0, 0.1, 0]} />;
+}
+
+function KrillModel() {
+  const group = useRef();
+  const { scene, animations } = useGLTF("/models/krill_antartic.glb");
+  const { actions, names } = useAnimations(animations, group);
+
+  useEffect(() => {
+    if (names && names.length > 0 && actions[names[0]]) {
+      actions[names[0]].reset().play();
+    }
+  }, [actions, names]);
+
+  return <primitive ref={group} object={scene} scale={0.0075} position={[0, 0.05, 0]} />;
+}
+
+function PlasticModel() {
+  const { scene } = useGLTF("/models/plastic_water_bottle.glb");
+  return <primitive object={scene} scale={0.15} position={[0, 0.05, 0]} />;
+}
+
+function GameItem({ item, onCollect }) {
   const ref = useRef();
-  const fish = useGLTF("/models/fish.glb");
 
   useFrame(() => {
     if (ref.current) ref.current.rotation.y += 0.02;
@@ -166,8 +197,10 @@ function Fish({ position, onCollect }) {
 
   return (
     <Interactive onSelect={onCollect}>
-      <group ref={ref} position={position}>
-        <primitive object={fish.scene} scale={0.004} position={[0, 0.1, 0]} />
+      <group ref={ref} position={item.position}>
+        {item.type === "fish" && <FishModel />}
+        {item.type === "krill" && <KrillModel />}
+        {item.type === "plastic" && <PlasticModel />}
       </group>
     </Interactive>
   );
@@ -180,11 +213,11 @@ export default function App() {
   const [isARActive, setIsARActive] = useState(false);
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
-  const [fishPosition, setFishPosition] = useState([0.4, 0.05, 0.4]);
+  const [currentItem, setCurrentItem] = useState({ type: "fish", position: [0.4, 0.05, 0.4] });
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(60); // Set to 1 Minute
   const [isGameOver, setIsGameOver] = useState(false);
 
   const ambience = useRef(null);
@@ -225,18 +258,21 @@ export default function App() {
     return () => clearInterval(timer);
   }, [gamePosition, timeLeft, isGameOver]);
 
-  const collectFish = () => {
+  const collectItem = () => {
     if (isGameOver) return;
 
-    // Secure Android Haptic Trigger immediately inside user event scope
     if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
       window.navigator.vibrate(50);
     }
 
-    // Trigger particle burst at the current fish position
-    setParticleTrigger({ id: Date.now(), pos: [...fishPosition] });
+    setParticleTrigger({ id: Date.now(), pos: [...currentItem.position] });
 
-    setScore((s) => s + 1);
+    // Base scoring rules
+    if (currentItem.type === "plastic") {
+      setScore((s) => Math.max(0, s - 2)); // Penalty for picking up plastic
+    } else {
+      setScore((s) => s + 1);
+    }
 
     if (collect.current) {
       collect.current.currentTime = 0;
@@ -247,7 +283,11 @@ export default function App() {
       footsteps.current.play().catch((e) => console.log(e));
     }
 
-    setFishPosition(getRandomSpawnPosition());
+    // Spawn next object with targeted generation properties
+    setCurrentItem({
+      type: getRandomItemType(),
+      position: getRandomSpawnPosition()
+    });
   };
 
   const stopGame = () => {
@@ -277,7 +317,7 @@ export default function App() {
       <div ref={setOverlayElement} style={{ position: "absolute", zIndex: 10, width: "100%", height: "100%", pointerEvents: "none", display: isARActive ? "flex" : "none", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", justifyContent: "space-between", padding: "20px", width: "100%", boxSizing: "border-box" }}>
           <div style={{ color: "white", fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
-            Fish: {score}
+            Score: {score}
           </div>
           {gamePosition && !isGameOver && (
             <div style={{ color: timeLeft <= 5 ? "#e11d48" : "white", fontSize: "28px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
@@ -298,7 +338,7 @@ export default function App() {
         {isGameOver && (
           <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", zIndex: 50, color: "white", textAlign: "center", padding: "20px", pointerEvents: "auto" }}>
             <h1 style={{ fontSize: "45px", marginBottom: "10px", textShadow: "2px 2px 10px rgba(0,0,0,1)", color: "#10b981" }}>TIME'S UP!</h1>
-            <p style={{ fontSize: "22px", marginBottom: "10px" }}>You fed ICY <b>{score}</b> fish!</p>
+            <p style={{ fontSize: "22px", marginBottom: "10px" }}>Your final score is <b>{score}</b>!</p>
             <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{getEndMessage()}</p>
             <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
               Play Again
@@ -328,7 +368,7 @@ export default function App() {
                   <group position={gamePosition}>
                     <IceFloe />
                     <Penguin />
-                    {!isGameOver && <Fish position={fishPosition} onCollect={collectFish} />}
+                    {!isGameOver && <GameItem item={currentItem} onCollect={collectItem} />}
                     <IceParticles trigger={particleTrigger} />
                   </group>
                 </Suspense>
