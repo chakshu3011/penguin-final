@@ -13,7 +13,6 @@ function XRTracker({ onXRStart }) {
   return null;
 }
 
-// FIX 1: Reverted to the wider, more exciting spawn radius
 const getRandomSpawnPosition = () => {
   const angle = Math.random() * Math.PI * 2;
   const radius = 0.5 + Math.random() * 0.6; // 0.5m to 1.1m
@@ -117,9 +116,7 @@ function Reticle({ onPlace }) {
         spawnPos.z += (dirZ / distance) * push;
       }
 
-      // Height locked to chest level
-      spawnPos.y = camera.position.y - 0.3;
-
+      spawnPos.y = camera.position.y - 0.3; // Locked to chest level
       onPlace(spawnPos);
     }}>
       <mesh ref={reticleRef} rotation={[-Math.PI / 2, 0, 0]}>
@@ -141,12 +138,11 @@ useGLTF.preload("/models/ice_floe.glb");
 
 function IceFloe() {
   const ice = useGLTF("/models/ice_floe.glb");
-  // FIX 3: Increased scale to 0.1 to comfortably fit the wider 1.1m spawn radius
   return <primitive object={ice.scene} scale={0.1} position={[0, -0.01, 0]} />;
 }
 
-// FIX 4: Penguin now takes the target item position and smoothly tracks it
-function Penguin({ targetPosition }) {
+// Icy now receives a specific target to walk to (where the user tapped)
+function Penguin({ walkTarget }) {
   const group = useRef();
   const penguin = useGLTF("/models/penguin.glb");
   const { actions, names } = useAnimations(penguin.animations, group);
@@ -159,22 +155,23 @@ function Penguin({ targetPosition }) {
   }, [actions, names]);
 
   useFrame((state, delta) => {
-    if (!group.current || !targetPosition) return;
+    if (!group.current || !walkTarget) return;
     
-    // Create a 3D target on the same floor level as Icy
-    const target = new THREE.Vector3(targetPosition[0], 0, targetPosition[2]);
+    const target = new THREE.Vector3(walkTarget[0], 0, walkTarget[2]);
     const currentPos = group.current.position;
-
-    // 1. Smoothly Rotate Icy to face the new object
-    const targetRotation = new THREE.Matrix4().lookAt(currentPos, target, new THREE.Vector3(0, 1, 0));
-    const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(targetRotation);
-    group.current.quaternion.slerp(targetQuaternion, delta * 4); // Turning speed
-
-    // 2. Smoothly move Icy toward the object (stops 0.15m away)
     const distance = currentPos.distanceTo(target);
-    if (distance > 0.15) {
+
+    // Only walk if Icy is not at the destination yet
+    if (distance > 0.05) {
       const dir = new THREE.Vector3().subVectors(target, currentPos).normalize();
-      group.current.position.add(dir.multiplyScalar(0.4 * delta)); // Walking speed
+      
+      // FIX: The model was walking backwards. By inverting the lookAt target, we force it to face forward!
+      const invertedTarget = new THREE.Vector3().copy(currentPos).sub(dir);
+      const targetRotation = new THREE.Matrix4().lookAt(currentPos, invertedTarget, new THREE.Vector3(0, 1, 0));
+      const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(targetRotation);
+      
+      group.current.quaternion.slerp(targetQuaternion, delta * 8); // Snappier turning
+      group.current.position.add(dir.multiplyScalar(0.4 * delta)); // Walk speed
     }
   });
 
@@ -201,7 +198,6 @@ function Krill({ position, onCollect }) {
   return (
     <Interactive onSelect={onCollect}>
       <group ref={ref} position={position}>
-        {/* FIX 2: Krill scale accurately set to 2 */}
         <primitive object={krill.scene} scale={2} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
@@ -229,8 +225,11 @@ export default function App() {
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
   
+  // Two separate positions: The Item's location, and where Icy is currently walking
   const [currentItem, setCurrentItem] = useState("fish");
-  const [itemPosition, setItemPosition] = useState([0.6, 0.05, 0.6]);
+  const [itemPosition, setItemPosition] = useState([0.6, 0.05, 0.6]); 
+  const [penguinWalkTarget, setPenguinWalkTarget] = useState([0, 0, 0]); // Starts at center
+  
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
@@ -289,13 +288,15 @@ export default function App() {
       collect.current.currentTime = 0;
       collect.current.play().catch((e) => console.log(e));
     }
-    
-    // Footsteps play dynamically as Icy starts walking to the next target
     if (footsteps.current) {
       footsteps.current.currentTime = 0;
       footsteps.current.play().catch((e) => console.log(e));
     }
 
+    // 1. Tell Icy to walk to the position of the item we JUST clicked
+    setPenguinWalkTarget([...itemPosition]);
+
+    // 2. Spawn the new item somewhere else so the user can look for it
     setItemPosition(getRandomSpawnPosition());
     setCurrentItem(getRandomItemType());
   };
@@ -392,8 +393,8 @@ export default function App() {
                 ) : (
                   <group position={gamePosition}>
                     <IceFloe />
-                    {/* Pass the itemPosition down to Icy so he can track it! */}
-                    <Penguin targetPosition={itemPosition} />
+                    {/* Pass the separate walk target down to Icy */}
+                    <Penguin walkTarget={penguinWalkTarget} />
                     {!isGameOver && currentItem === "fish" && <Fish position={itemPosition} onCollect={collectItem} />}
                     {!isGameOver && currentItem === "krill" && <Krill position={itemPosition} onCollect={collectItem} />}
                     {!isGameOver && currentItem === "plastic" && <Plastic position={itemPosition} onCollect={collectItem} />}
