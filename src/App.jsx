@@ -376,9 +376,10 @@ export default function App() {
       )}
 
       <Canvas style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
-        {/* Suspense is moved OUTSIDE the XR environment to prevent loading crashes */}
-        <Suspense fallback={null}>
-          <XR>
+        {/* XR must be the outermost wrapper so the WebXR session never gets unmounted */}
+        <XR>
+          {/* Suspense goes INSIDE XR to pause only the models, not the AR session */}
+          <Suspense fallback={null}>
             <XRTracker onXRStart={setIsARActive} />
             {isARActive && (
               <>
@@ -396,8 +397,8 @@ export default function App() {
                 </group>
               </>
             )}
-          </XR>
-        </Suspense>
+          </Suspense>
+        </XR>
       </Canvas>
     </div>
   );
