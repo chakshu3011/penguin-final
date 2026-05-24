@@ -89,14 +89,15 @@ function IceParticles({ trigger }) {
 }
 
 // ==========================================
-// 2. TARGET RETICLE (FIXED: UNMOUNT TIMEOUT)
+// 2. TARGET RETICLE (PERMANENTLY MOUNTED)
 // ==========================================
-function Reticle({ onPlace }) {
+function Reticle({ onPlace, isPlaced }) {
   const reticleRef = useRef();
   const { camera } = useThree();
 
   useHitTest((hitMatrix, hit) => {
-    if (hit && reticleRef.current) {
+    // Only calculate physics if the game hasn't been placed yet
+    if (hit && reticleRef.current && !isPlaced) {
       hitMatrix.decompose(
         reticleRef.current.position,
         reticleRef.current.quaternion,
@@ -107,7 +108,8 @@ function Reticle({ onPlace }) {
 
   return (
     <Interactive onSelect={() => {
-      if (!reticleRef.current) return;
+      // Ignore clicks if already placed or if camera hasn't found a floor
+      if (isPlaced || !reticleRef.current) return;
 
       const spawnPos = reticleRef.current.position.clone();
       const dirX = spawnPos.x - camera.position.x;
@@ -120,12 +122,10 @@ function Reticle({ onPlace }) {
         spawnPos.z += (dirZ / distance) * push;
       }
 
-      // CRITICAL FIX: Defer the unmounting so WebXR can finish its internal click event cleanly
-      setTimeout(() => {
-        onPlace(spawnPos);
-      }, 50); 
+      onPlace(spawnPos);
     }}>
-      <mesh ref={reticleRef} rotation={[-Math.PI / 2, 0, 0]}>
+      {/* Reticle stays in memory but becomes invisible once placed */}
+      <mesh ref={reticleRef} rotation={[-Math.PI / 2, 0, 0]} visible={!isPlaced}>
         <ringGeometry args={[0.15, 0.2, 32]} />
         <meshStandardMaterial color="white" />
       </mesh>
@@ -144,13 +144,7 @@ useGLTF.preload("/models/ice_floe.glb");
 
 function IceFloe() {
   const ice = useGLTF("/models/ice_floe.glb");
-  return (
-    <primitive 
-      object={ice.scene} 
-      scale={0.035} 
-      position={[0, -0.01, 0]} 
-    />
-  );
+  return <primitive object={ice.scene} scale={0.035} position={[0, -0.01, 0]} />;
 }
 
 function Penguin() {
@@ -214,7 +208,7 @@ function PlasticModel({ visible }) {
   );
 }
 
-function GameItem({ item, onCollect }) {
+function GameItem({ item, onCollect, visible }) {
   const ref = useRef();
 
   useFrame(() => {
@@ -222,8 +216,11 @@ function GameItem({ item, onCollect }) {
   });
 
   return (
-    <Interactive onSelect={onCollect}>
-      <group ref={ref} position={item.position}>
+    <Interactive onSelect={() => {
+      // Only allow collection if the game is actively showing the item
+      if (visible) onCollect();
+    }}>
+      <group ref={ref} position={item.position} visible={visible}>
         <FishModel visible={item.type === "fish"} />
         <KrillModel visible={item.type === "krill"} />
         <PlasticModel visible={item.type === "plastic"} />
@@ -387,21 +384,20 @@ export default function App() {
         <XR>
           <XRTracker onXRStart={setIsARActive} />
           {isARActive && (
-            <>
+            // CRITICAL ARCHITECTURE CHANGE: Suspense wraps everything to load models BEFORE the tap. 
+            // The models are now constantly mounted, avoiding all unmount crashes.
+            <Suspense fallback={null}>
               <ambientLight intensity={2.5} />
-              {!gamePosition ? (
-                <Reticle onPlace={setGamePosition} />
-              ) : (
-                <Suspense fallback={null}>
-                  <group position={gamePosition}>
-                    <IceFloe />
-                    <Penguin />
-                    {!isGameOver && <GameItem item={currentItem} onCollect={collectItem} />}
-                    <IceParticles trigger={particleTrigger} />
-                  </group>
-                </Suspense>
-              )}
-            </>
+              
+              <Reticle onPlace={setGamePosition} isPlaced={!!gamePosition} />
+              
+              <group visible={!!gamePosition} position={gamePosition || [0, 0, 0]}>
+                <IceFloe />
+                <Penguin />
+                <GameItem item={currentItem} onCollect={collectItem} visible={!isGameOver} />
+                <IceParticles trigger={particleTrigger} />
+              </group>
+            </Suspense>
           )}
         </XR>
       </Canvas>
