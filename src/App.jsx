@@ -21,10 +21,9 @@ const getRandomSpawnPosition = () => {
 
 const getRandomItemType = () => {
   const random = Math.random();
-  // Math must equal 100%. 60% Fish, 35% Krill, 5% Plastic.
-  if (random < 0.60) return "fish";    
-  if (random < 0.95) return "krill";   
-  return "plastic";                    
+  if (random < 0.60) return "fish";    // 60%
+  if (random < 0.95) return "krill";   // 35%
+  return "plastic";                    // 5%
 };
 
 // ==========================================
@@ -90,14 +89,13 @@ function IceParticles({ trigger }) {
 }
 
 // ==========================================
-// 2. TARGET RETICLE (SAFE MOUNTING)
+// 2. TARGET RETICLE
 // ==========================================
 function Reticle({ onPlace, isPlaced }) {
   const reticleRef = useRef();
   const { camera } = useThree();
 
   useHitTest((hitMatrix, hit) => {
-    // Stops calculating hits once placed to save processing power
     if (hit && reticleRef.current && !isPlaced) {
       hitMatrix.decompose(
         reticleRef.current.position,
@@ -124,7 +122,7 @@ function Reticle({ onPlace, isPlaced }) {
 
       onPlace(spawnPos);
     }}>
-      {/* Reticle becomes invisible instead of deleting, preventing camera crashes */}
+      {/* Mesh is hidden rather than deleted to prevent WebXR crashes */}
       <mesh ref={reticleRef} rotation={[-Math.PI / 2, 0, 0]} visible={!isPlaced}>
         <ringGeometry args={[0.15, 0.2, 32]} />
         <meshStandardMaterial color="white" />
@@ -377,29 +375,29 @@ export default function App() {
         />
       )}
 
-      {/* RESTORED TO THE SAFE RENDERING STRUCTURE */}
       <Canvas style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
-        <XR>
-          <XRTracker onXRStart={setIsARActive} />
-          {isARActive && (
-            <>
-              <ambientLight intensity={2.5} />
-              <Reticle onPlace={setGamePosition} isPlaced={!!gamePosition} />
-              
-              {/* Suspense is safely tucked away so it doesn't crash the camera boot sequence */}
-              {gamePosition && (
-                <Suspense fallback={null}>
-                  <group position={gamePosition}>
-                    <IceFloe />
-                    <Penguin />
-                    {!isGameOver && <GameItem item={currentItem} onCollect={collectItem} />}
-                    <IceParticles trigger={particleTrigger} />
-                  </group>
-                </Suspense>
-              )}
-            </>
-          )}
-        </XR>
+        {/* Suspense is moved OUTSIDE the XR environment to prevent loading crashes */}
+        <Suspense fallback={null}>
+          <XR>
+            <XRTracker onXRStart={setIsARActive} />
+            {isARActive && (
+              <>
+                <ambientLight intensity={2.5} />
+                
+                {/* The ring is ALWAYS rendered, but becomes invisible on tap */}
+                <Reticle onPlace={setGamePosition} isPlaced={!!gamePosition} />
+                
+                {/* The game is ALWAYS rendered, but is invisible until the ring is tapped */}
+                <group position={gamePosition || [0, -10, 0]} visible={!!gamePosition}>
+                  <IceFloe />
+                  <Penguin />
+                  <GameItem item={currentItem} onCollect={collectItem} />
+                  <IceParticles trigger={particleTrigger} />
+                </group>
+              </>
+            )}
+          </XR>
+        </Suspense>
       </Canvas>
     </div>
   );
