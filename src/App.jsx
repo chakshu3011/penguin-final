@@ -2,7 +2,7 @@ import "./App.css";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { XR, ARButton, Interactive, useHitTest, useXR } from "@react-three/xr";
 import { useGLTF, useAnimations } from "@react-three/drei";
-import { useRef, useEffect, useState, Suspense } from "react";
+import { useRef, useEffect, useState, Suspense, useMemo } from "react";
 import * as THREE from "three";
 
 function XRTracker({ onXRStart }) {
@@ -15,7 +15,7 @@ function XRTracker({ onXRStart }) {
 
 const getRandomSpawnPosition = () => {
   const angle = Math.random() * Math.PI * 2;
-  const radius = 0.5 + Math.random() * 0.6; // Stays safely within the expanded ice floe radius
+  const radius = 0.5 + Math.random() * 0.6; // Stays safely within the ice floe radius
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
@@ -163,66 +163,52 @@ function Penguin() {
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
 
-// Fixed: Controlled purely via visibility parameters to stop cache crashes
-function FishModel({ visible }) {
-  const group = useRef();
-  const { scene, animations } = useGLTF("/models/fish.glb");
-  const { actions, names } = useAnimations(animations, group);
-
-  useEffect(() => {
-    if (names && names.length > 0 && actions[names[0]]) {
-      actions[names[0]].reset().play();
-    }
-  }, [actions, names]);
-
-  return (
-    <group ref={group} visible={visible}>
-      <primitive object={scene} scale={0.004} position={[0, 0.1, 0]} dispose={null} />
-    </group>
-  );
-}
-
-function KrillModel({ visible }) {
-  const group = useRef();
-  const { scene, animations } = useGLTF("/models/krill_antartic.glb");
-  const { actions, names } = useAnimations(animations, group);
-
-  useEffect(() => {
-    if (names && names.length > 0 && actions[names[0]]) {
-      actions[names[0]].reset().play();
-    }
-  }, [actions, names]);
-
-  return (
-    <group ref={group} visible={visible}>
-      <primitive object={scene} scale={0.0075} position={[0, 0.05, 0]} dispose={null} />
-    </group>
-  );
-}
-
-function PlasticModel({ visible }) {
-  const { scene } = useGLTF("/models/plastic_water_bottle.glb");
-  return (
-    <group visible={visible}>
-      <primitive object={scene} scale={0.15} position={[0, 0.05, 0]} dispose={null} />
-    </group>
-  );
-}
-
+// Unified, secure interactable component utilizing the scene-cloning pattern
 function GameItem({ item, onCollect }) {
   const ref = useRef();
+  
+  const fish = useGLTF("/models/fish.glb");
+  const krill = useGLTF("/models/krill_antartic.glb");
+  const plastic = useGLTF("/models/plastic_water_bottle.glb");
+
+  // 1. Determine active GLTF source bundle cleanly
+  const activeGLTF = useMemo(() => {
+    if (item.type === "krill") return krill;
+    if (item.type === "plastic") return plastic;
+    return fish;
+  }, [item.type, fish, krill, plastic]);
+
+  // 2. Clone the active scene graph instance to shield the global asset cache
+  const clonedScene = useMemo(() => {
+    return activeGLTF.scene.clone();
+  }, [activeGLTF]);
+
+  // 3. Bind animations directly onto the local component reference wrapper
+  const { actions, names } = useAnimations(activeGLTF.animations, ref);
+
+  useEffect(() => {
+    if (names && names.length > 0 && actions[names[0]]) {
+      actions[names[0]].reset().play();
+    }
+    return () => {
+      if (names && names.length > 0 && actions[names[0]]) {
+        actions[names[0]].stop();
+      }
+    };
+  }, [actions, names, item.type]);
 
   useFrame(() => {
     if (ref.current) ref.current.rotation.y += 0.02;
   });
 
+  // Structural mapping adjustments based on object scale variants
+  const scale = item.type === "krill" ? 0.0075 : item.type === "plastic" ? 0.15 : 0.004;
+  const yOffset = item.type === "fish" ? 0.1 : 0.05;
+
   return (
     <Interactive onSelect={onCollect}>
       <group ref={ref} position={item.position}>
-        {/* All items remain mounted, avoiding unmount disposal errors entirely */}
-        <FishModel visible={item.type === "fish"} />
-        <KrillModel visible={item.type === "krill"} />
-        <PlasticModel visible={item.type === "plastic"} />
+        <primitive object={clonedScene} scale={scale} position={[0, yOffset, 0]} dispose={null} />
       </group>
     </Interactive>
   );
@@ -244,7 +230,7 @@ export default function App() {
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60); 
+  const [timeLeft, setTimeLeft] = useState(60); // 1-Minute Target Round Duration
   const [isGameOver, setIsGameOver] = useState(false);
 
   const ambience = useRef(null);
@@ -397,6 +383,7 @@ export default function App() {
                     
                     {!isGameOver && (
                       <GameItem 
+                        key={currentItem.id} 
                         item={currentItem} 
                         onCollect={collectItem} 
                       />
