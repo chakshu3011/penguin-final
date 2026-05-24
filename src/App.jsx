@@ -13,9 +13,11 @@ function XRTracker({ onXRStart }) {
   return null;
 }
 
+// FIX 1: Tighter spawn radius so the user doesn't have to chase items 360 degrees
 const getRandomSpawnPosition = () => {
   const angle = Math.random() * Math.PI * 2;
-  const radius = 0.5 + Math.random() * 0.6;
+  // Reduced radius from 0.5-1.1 down to 0.2-0.45 meters
+  const radius = 0.2 + Math.random() * 0.25; 
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
@@ -110,11 +112,16 @@ function Reticle({ onPlace }) {
       const dirZ = spawnPos.z - camera.position.z;
       const distance = Math.sqrt(dirX * dirX + dirZ * dirZ);
 
+      // Keep it comfortably in front of the user
       if (distance < 1.4) {
         const push = 1.4 - distance;
         spawnPos.x += (dirX / distance) * push;
         spawnPos.z += (dirZ / distance) * push;
       }
+
+      // FIX 3: Lock the height to neck/chest level! 
+      // We ignore the floor's Y position and use the camera's Y position minus 30 centimeters.
+      spawnPos.y = camera.position.y - 0.3;
 
       onPlace(spawnPos);
     }}>
@@ -137,7 +144,8 @@ useGLTF.preload("/models/ice_floe.glb");
 
 function IceFloe() {
   const ice = useGLTF("/models/ice_floe.glb");
-  return <primitive object={ice.scene} scale={0.035} position={[0, -0.01, 0]} />;
+  // FIX 2: Increased scale from 0.035 to 0.075 to stretch the ice floe wider
+  return <primitive object={ice.scene} scale={0.075} position={[0, -0.01, 0]} />;
 }
 
 function Penguin() {
@@ -175,7 +183,7 @@ function Krill({ position, onCollect }) {
   return (
     <Interactive onSelect={onCollect}>
       <group ref={ref} position={position}>
-        <primitive object={krill.scene} scale={15} position={[0, 0.05, 0]} />
+        <primitive object={krill.scene} scale={0.5} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
   );
@@ -202,9 +210,9 @@ export default function App() {
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
   
-  // New State for randomizing items
   const [currentItem, setCurrentItem] = useState("fish");
-  const [itemPosition, setItemPosition] = useState([0.4, 0.05, 0.4]);
+  // Default start position is now closer to the penguin
+  const [itemPosition, setItemPosition] = useState([0.3, 0.05, 0.3]);
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
@@ -268,7 +276,6 @@ export default function App() {
       footsteps.current.play().catch((e) => console.log(e));
     }
 
-    // Spawn the next item randomly
     setItemPosition(getRandomSpawnPosition());
     setCurrentItem(getRandomItemType());
   };
@@ -288,7 +295,6 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", backgroundColor: "#0b0f19" }}>
       
-      {/* INTRO SCREEN */}
       {!isARActive && (
         <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "25vh", color: "white", fontFamily: "sans-serif" }}>
           <h1 style={{ fontSize: "42px", letterSpacing: "2px", marginBottom: "10px" }}>ICY AR</h1>
@@ -296,7 +302,6 @@ export default function App() {
         </div>
       )}
 
-      {/* AR HUD VIEW */}
       <div ref={setOverlayElement} style={{ position: "absolute", zIndex: 10, width: "100%", height: "100%", pointerEvents: "none", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         {isARActive && (
           <>
@@ -316,7 +321,7 @@ export default function App() {
 
             {!gamePosition && (
               <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "white", fontSize: "18px", fontWeight: "bold", textAlign: "center", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.2)", padding: "14px 24px", borderRadius: "30px", width: "80%" }}>
-                Scan the floor and tap the ring to place ICY!
+                Aim at a surface and tap the ring to spawn ICY!
               </div>
             )}
 
