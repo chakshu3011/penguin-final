@@ -13,11 +13,10 @@ function XRTracker({ onXRStart }) {
   return null;
 }
 
-// FIX 1: Tighter spawn radius so the user doesn't have to chase items 360 degrees
+// FIX 1: Reverted to the wider, more exciting spawn radius
 const getRandomSpawnPosition = () => {
   const angle = Math.random() * Math.PI * 2;
-  // Reduced radius from 0.5-1.1 down to 0.2-0.45 meters
-  const radius = 0.2 + Math.random() * 0.25; 
+  const radius = 0.5 + Math.random() * 0.6; // 0.5m to 1.1m
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
@@ -112,15 +111,13 @@ function Reticle({ onPlace }) {
       const dirZ = spawnPos.z - camera.position.z;
       const distance = Math.sqrt(dirX * dirX + dirZ * dirZ);
 
-      // Keep it comfortably in front of the user
       if (distance < 1.4) {
         const push = 1.4 - distance;
         spawnPos.x += (dirX / distance) * push;
         spawnPos.z += (dirZ / distance) * push;
       }
 
-      // FIX 3: Lock the height to neck/chest level! 
-      // We ignore the floor's Y position and use the camera's Y position minus 30 centimeters.
+      // Height locked to chest level
       spawnPos.y = camera.position.y - 0.3;
 
       onPlace(spawnPos);
@@ -144,11 +141,12 @@ useGLTF.preload("/models/ice_floe.glb");
 
 function IceFloe() {
   const ice = useGLTF("/models/ice_floe.glb");
-  // FIX 2: Increased scale from 0.035 to 0.075 to stretch the ice floe wider
-  return <primitive object={ice.scene} scale={0.075} position={[0, -0.01, 0]} />;
+  // FIX 3: Increased scale to 0.1 to comfortably fit the wider 1.1m spawn radius
+  return <primitive object={ice.scene} scale={0.1} position={[0, -0.01, 0]} />;
 }
 
-function Penguin() {
+// FIX 4: Penguin now takes the target item position and smoothly tracks it
+function Penguin({ targetPosition }) {
   const group = useRef();
   const penguin = useGLTF("/models/penguin.glb");
   const { actions, names } = useAnimations(penguin.animations, group);
@@ -159,6 +157,26 @@ function Penguin() {
       activeAction.reset().fadeIn(0.25).play();
     }
   }, [actions, names]);
+
+  useFrame((state, delta) => {
+    if (!group.current || !targetPosition) return;
+    
+    // Create a 3D target on the same floor level as Icy
+    const target = new THREE.Vector3(targetPosition[0], 0, targetPosition[2]);
+    const currentPos = group.current.position;
+
+    // 1. Smoothly Rotate Icy to face the new object
+    const targetRotation = new THREE.Matrix4().lookAt(currentPos, target, new THREE.Vector3(0, 1, 0));
+    const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(targetRotation);
+    group.current.quaternion.slerp(targetQuaternion, delta * 4); // Turning speed
+
+    // 2. Smoothly move Icy toward the object (stops 0.15m away)
+    const distance = currentPos.distanceTo(target);
+    if (distance > 0.15) {
+      const dir = new THREE.Vector3().subVectors(target, currentPos).normalize();
+      group.current.position.add(dir.multiplyScalar(0.4 * delta)); // Walking speed
+    }
+  });
 
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
@@ -183,7 +201,8 @@ function Krill({ position, onCollect }) {
   return (
     <Interactive onSelect={onCollect}>
       <group ref={ref} position={position}>
-        <primitive object={krill.scene} scale={0.5} position={[0, 0.05, 0]} />
+        {/* FIX 2: Krill scale accurately set to 2 */}
+        <primitive object={krill.scene} scale={2} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
   );
@@ -211,8 +230,7 @@ export default function App() {
   const [gamePosition, setGamePosition] = useState(null);
   
   const [currentItem, setCurrentItem] = useState("fish");
-  // Default start position is now closer to the penguin
-  const [itemPosition, setItemPosition] = useState([0.3, 0.05, 0.3]);
+  const [itemPosition, setItemPosition] = useState([0.6, 0.05, 0.6]);
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
@@ -271,6 +289,8 @@ export default function App() {
       collect.current.currentTime = 0;
       collect.current.play().catch((e) => console.log(e));
     }
+    
+    // Footsteps play dynamically as Icy starts walking to the next target
     if (footsteps.current) {
       footsteps.current.currentTime = 0;
       footsteps.current.play().catch((e) => console.log(e));
@@ -372,7 +392,8 @@ export default function App() {
                 ) : (
                   <group position={gamePosition}>
                     <IceFloe />
-                    <Penguin />
+                    {/* Pass the itemPosition down to Icy so he can track it! */}
+                    <Penguin targetPosition={itemPosition} />
                     {!isGameOver && currentItem === "fish" && <Fish position={itemPosition} onCollect={collectItem} />}
                     {!isGameOver && currentItem === "krill" && <Krill position={itemPosition} onCollect={collectItem} />}
                     {!isGameOver && currentItem === "plastic" && <Plastic position={itemPosition} onCollect={collectItem} />}
