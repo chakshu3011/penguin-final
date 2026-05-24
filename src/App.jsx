@@ -19,8 +19,13 @@ const getRandomSpawnPosition = () => {
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
-const itemTypes = ["fish", "krill", "plastic"];
-const getRandomItemType = () => itemTypes[Math.floor(Math.random() * itemTypes.length)];
+// FIX: Weighted probability spawn
+const getRandomItemType = () => {
+  const rand = Math.random() * 100;
+  if (rand < 70) return "fish";     // 70% chance (60% + 10% to complete 100%)
+  if (rand < 95) return "krill";    // 25% chance
+  return "plastic";                 // 5% chance
+};
 
 // ==========================================
 // 1. SNOW PARTICLE SYSTEM
@@ -178,7 +183,6 @@ function Penguin({ walkTarget }) {
 function Fish({ position, onCollect }) {
   const group = useRef();
   const fish = useGLTF("/models/fish.glb");
-  // FIX: Added animation support for Fish
   const { actions, names } = useAnimations(fish.animations, group);
 
   useEffect(() => {
@@ -202,7 +206,6 @@ function Fish({ position, onCollect }) {
 function Krill({ position, onCollect }) {
   const group = useRef();
   const krill = useGLTF("/models/krill.glb");
-  // FIX: Added animation support for Krill
   const { actions, names } = useAnimations(krill.animations, group);
 
   useEffect(() => {
@@ -250,13 +253,12 @@ export default function App() {
   
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
-  // FIX: Split score and individual object tracking
   const [score, setScore] = useState(0);
   const [fishCount, setFishCount] = useState(0);
   const [krillCount, setKrillCount] = useState(0);
   
-  const [timeLeft, setTimeLeft] = useState(30);
-  // FIX: Status can now be "playing", "win", "lose", or "timeup"
+  // FIX: Increased to 60 seconds
+  const [timeLeft, setTimeLeft] = useState(60);
   const [gameStatus, setGameStatus] = useState("playing");
 
   const ambience = useRef(null);
@@ -283,6 +285,7 @@ export default function App() {
     };
   }, []);
 
+  // Main Timer Countdown
   useEffect(() => {
     let timer;
     if (gamePosition && timeLeft > 0 && gameStatus === "playing") {
@@ -296,6 +299,20 @@ export default function App() {
     }
     return () => clearInterval(timer);
   }, [gamePosition, timeLeft, gameStatus]);
+
+  // FIX: Safely despawn plastic after 5 seconds if untouched
+  useEffect(() => {
+    let plasticTimeout;
+    if (gameStatus === "playing" && currentItem === "plastic") {
+      plasticTimeout = setTimeout(() => {
+        setItemPosition(getRandomSpawnPosition());
+        setCurrentItem(getRandomItemType());
+      }, 5000);
+    }
+    
+    // Cleanup ensures if the user taps it, the timeout doesn't fire later
+    return () => clearTimeout(plasticTimeout);
+  }, [currentItem, gameStatus]);
 
   const collectItem = () => {
     if (gameStatus !== "playing") return;
@@ -315,21 +332,19 @@ export default function App() {
       footsteps.current.play().catch((e) => console.log(e));
     }
 
-    // Tell Icy to walk to the tapped item
     setPenguinWalkTarget([...itemPosition]);
 
-    // FIX: Core Game Logic (Scores and Win/Loss)
     if (currentItem === "plastic") {
       setGameStatus("lose");
       if (penguinChirp.current) {
         penguinChirp.current.currentTime = 0;
         penguinChirp.current.play().catch((e) => console.log(e));
       }
-      return; // Stop here, do not spawn a new item!
+      return; 
     } else if (currentItem === "fish") {
       const newFishCount = fishCount + 1;
       setFishCount(newFishCount);
-      setScore((s) => s + 1); // Fish = 1 point
+      setScore((s) => s + 1); 
       if (newFishCount >= 10) {
         setGameStatus("win");
         return;
@@ -337,14 +352,13 @@ export default function App() {
     } else if (currentItem === "krill") {
       const newKrillCount = krillCount + 1;
       setKrillCount(newKrillCount);
-      setScore((s) => s + 2); // Krill = 2 points
+      setScore((s) => s + 2); 
       if (newKrillCount >= 5) {
         setGameStatus("win");
         return;
       }
     }
 
-    // Spawn the next item
     setItemPosition(getRandomSpawnPosition());
     setCurrentItem(getRandomItemType());
   };
@@ -354,7 +368,6 @@ export default function App() {
     window.location.reload();
   };
 
-  // Helper to dynamically render the correct Game Over screen
   const getEndScreenData = () => {
     if (gameStatus === "win") return { title: "YOU WIN!", color: "#10b981", msg: "ICY is stuffed and happy! 🎉" };
     if (gameStatus === "lose") return { title: "GAME OVER", color: "#e11d48", msg: "Oh no! ICY ate plastic! 😭" };
@@ -368,9 +381,19 @@ export default function App() {
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", backgroundColor: "#0b0f19" }}>
       
       {!isARActive && (
-        <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "25vh", color: "white", fontFamily: "sans-serif" }}>
+        <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "20vh", color: "white", fontFamily: "sans-serif" }}>
           <h1 style={{ fontSize: "42px", letterSpacing: "2px", marginBottom: "10px" }}>ICY AR</h1>
           <p style={{ fontSize: "18px", opacity: 0.8 }}>An Augmented Reality Experience</p>
+          
+          {/* FIX: Added Instruction Text */}
+          <div style={{ marginTop: "40px", padding: "20px", background: "rgba(255,255,255,0.1)", borderRadius: "15px", border: "1px solid rgba(255,255,255,0.3)", textAlign: "center", width: "80%", maxWidth: "350px" }}>
+            <h3 style={{ margin: "0 0 10px 0", color: "#60a5fa" }}>How to Play</h3>
+            <p style={{ margin: "5px 0", fontSize: "15px" }}>🐟 Collect <b>10 Fish</b> OR</p>
+            <p style={{ margin: "5px 0", fontSize: "15px" }}>🦐 Collect <b>5 Krill</b> to win!</p>
+            <hr style={{ border: "0.5px solid rgba(255,255,255,0.2)", margin: "10px 0" }} />
+            <p style={{ margin: "5px 0", fontSize: "15px", color: "#fb7185" }}>⚠️ <b>AVOID PLASTIC!</b></p>
+            <p style={{ margin: "0", fontSize: "13px", opacity: 0.7 }}>(If plastic appears, wait 5s for it to vanish)</p>
+          </div>
         </div>
       )}
 
