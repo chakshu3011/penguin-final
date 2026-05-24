@@ -15,15 +15,8 @@ function XRTracker({ onXRStart }) {
 
 const getRandomSpawnPosition = () => {
   const angle = Math.random() * Math.PI * 2;
-  const radius = 0.5 + Math.random() * 0.6; 
+  const radius = 0.5 + Math.random() * 0.6; // Stays safely within the expanded ice floe radius
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
-};
-
-const getRandomItemType = () => {
-  const random = Math.random();
-  if (random < 0.60) return "fish";    // 60%
-  if (random < 0.95) return "krill";   // 35%
-  return "plastic";                    // 5%
 };
 
 // ==========================================
@@ -36,6 +29,7 @@ function IceParticles({ trigger }) {
   useEffect(() => {
     if (!trigger.id) return;
     
+    // Create a burst of 15 ice shards at the fish's collection site
     const count = 15;
     const temp = [];
     for (let i = 0; i < count; i++) {
@@ -43,10 +37,10 @@ function IceParticles({ trigger }) {
         pos: [...trigger.pos],
         vel: [
           (Math.random() - 0.5) * 0.5,
-          Math.random() * 0.6 + 0.2, 
+          Math.random() * 0.6 + 0.2, // Upward burst velocity
           (Math.random() - 0.5) * 0.5
         ],
-        life: 1.0 
+        life: 1.0 // Lifespan multiplier
       });
     }
     setParticles(temp);
@@ -61,7 +55,7 @@ function IceParticles({ trigger }) {
         p.pos[0] += p.vel[0] * delta;
         p.pos[1] += p.vel[1] * delta;
         p.pos[2] += p.vel[2] * delta;
-        p.vel[1] -= 0.98 * delta; 
+        p.vel[1] -= 0.98 * delta; // Simulated gravity pulling shards down
         p.life -= delta * 2.0;
         return p;
       })
@@ -89,14 +83,14 @@ function IceParticles({ trigger }) {
 }
 
 // ==========================================
-// 2. TARGET RETICLE
+// 2. RETICLE TARGET
 // ==========================================
-function Reticle({ onPlace, isPlaced }) {
+function Reticle({ onPlace }) {
   const reticleRef = useRef();
   const { camera } = useThree();
 
   useHitTest((hitMatrix, hit) => {
-    if (hit && reticleRef.current && !isPlaced) {
+    if (hit && reticleRef.current) {
       hitMatrix.decompose(
         reticleRef.current.position,
         reticleRef.current.quaternion,
@@ -107,13 +101,16 @@ function Reticle({ onPlace, isPlaced }) {
 
   return (
     <Interactive onSelect={() => {
-      if (isPlaced || !reticleRef.current) return;
-
+      if (!reticleRef.current) return;
+      
       const spawnPos = reticleRef.current.position.clone();
+      
+      // Calculate directional vector directly from camera to the target point
       const dirX = spawnPos.x - camera.position.x;
       const dirZ = spawnPos.z - camera.position.z;
       const distance = Math.sqrt(dirX * dirX + dirZ * dirZ);
 
+      // Force-align placement forward away from user's viewpoint to counter 180 flips
       if (distance < 1.4) {
         const push = 1.4 - distance;
         spawnPos.x += (dirX / distance) * push;
@@ -122,8 +119,7 @@ function Reticle({ onPlace, isPlaced }) {
 
       onPlace(spawnPos);
     }}>
-      {/* Mesh is hidden rather than deleted to prevent WebXR crashes */}
-      <mesh ref={reticleRef} rotation={[-Math.PI / 2, 0, 0]} visible={!isPlaced}>
+      <mesh ref={reticleRef} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.15, 0.2, 32]} />
         <meshStandardMaterial color="white" />
       </mesh>
@@ -136,13 +132,17 @@ function Reticle({ onPlace, isPlaced }) {
 // ==========================================
 useGLTF.preload("/models/penguin.glb");
 useGLTF.preload("/models/fish.glb");
-useGLTF.preload("/models/krill_antartic.glb");
-useGLTF.preload("/models/plastic_water_bottle.glb");
 useGLTF.preload("/models/ice_floe.glb");
 
 function IceFloe() {
   const ice = useGLTF("/models/ice_floe.glb");
-  return <primitive object={ice.scene} scale={0.035} position={[0, -0.01, 0]} />;
+  return (
+    <primitive 
+      object={ice.scene} 
+      scale={0.035} // Expanded scale so the igloo and snowy layout wrap the zone beautifully
+      position={[0, -0.01, 0]} 
+    />
+  );
 }
 
 function Penguin() {
@@ -152,6 +152,7 @@ function Penguin() {
 
   useEffect(() => {
     if (names && names.length > 0) {
+      // Plays the first active track found inside the skeleton file
       const activeAction = actions[names[0]];
       activeAction.reset().fadeIn(0.25).play();
     }
@@ -160,54 +161,9 @@ function Penguin() {
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
 
-// Sub-models use "visible" property so they don't crash the GPU when swapping
-function FishModel({ visible }) {
-  const group = useRef();
-  const { scene, animations } = useGLTF("/models/fish.glb");
-  const { actions, names } = useAnimations(animations, group);
-
-  useEffect(() => {
-    if (names && names.length > 0 && actions[names[0]]) {
-      actions[names[0]].reset().play();
-    }
-  }, [actions, names]);
-
-  return (
-    <group ref={group} visible={visible}>
-      <primitive object={scene} scale={0.004} position={[0, 0.1, 0]} dispose={null} />
-    </group>
-  );
-}
-
-function KrillModel({ visible }) {
-  const group = useRef();
-  const { scene, animations } = useGLTF("/models/krill_antartic.glb");
-  const { actions, names } = useAnimations(animations, group);
-
-  useEffect(() => {
-    if (names && names.length > 0 && actions[names[0]]) {
-      actions[names[0]].reset().play();
-    }
-  }, [actions, names]);
-
-  return (
-    <group ref={group} visible={visible}>
-      <primitive object={scene} scale={0.0075} position={[0, 0.05, 0]} dispose={null} />
-    </group>
-  );
-}
-
-function PlasticModel({ visible }) {
-  const { scene } = useGLTF("/models/plastic_water_bottle.glb");
-  return (
-    <group visible={visible}>
-      <primitive object={scene} scale={0.15} position={[0, 0.05, 0]} dispose={null} />
-    </group>
-  );
-}
-
-function GameItem({ item, onCollect }) {
+function Fish({ position, onCollect }) {
   const ref = useRef();
+  const fish = useGLTF("/models/fish.glb");
 
   useFrame(() => {
     if (ref.current) ref.current.rotation.y += 0.02;
@@ -215,32 +171,25 @@ function GameItem({ item, onCollect }) {
 
   return (
     <Interactive onSelect={onCollect}>
-      <group ref={ref} position={item.position}>
-        <FishModel visible={item.type === "fish"} />
-        <KrillModel visible={item.type === "krill"} />
-        <PlasticModel visible={item.type === "plastic"} />
+      <group ref={ref} position={position}>
+        <primitive object={fish.scene} scale={0.0015} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
   );
 }
 
 // ==========================================
-// 4. MAIN GAME ENGINE
+// 4. MAIN GAME CONTROLLER
 // ==========================================
 export default function App() {
   const [isARActive, setIsARActive] = useState(false);
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
-  
-  const [currentItem, setCurrentItem] = useState({ 
-    type: "fish", 
-    position: [0.4, 0.05, 0.4],
-    id: Date.now()
-  });
+  const [fishPosition, setFishPosition] = useState([0.4, 0.05, 0.4]);
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60); 
+  const [timeLeft, setTimeLeft] = useState(30);
   const [isGameOver, setIsGameOver] = useState(false);
 
   const ambience = useRef(null);
@@ -281,20 +230,18 @@ export default function App() {
     return () => clearInterval(timer);
   }, [gamePosition, timeLeft, isGameOver]);
 
-  const collectItem = () => {
+  const collectFish = () => {
     if (isGameOver) return;
 
+    // Secure Android Haptic Trigger immediately inside user event scope
     if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
       window.navigator.vibrate(50);
     }
 
-    setParticleTrigger({ id: Date.now(), pos: [...currentItem.position] });
+    // Trigger particle burst at the current fish position
+    setParticleTrigger({ id: Date.now(), pos: [...fishPosition] });
 
-    if (currentItem.type === "plastic") {
-      setScore((s) => Math.max(0, s - 2)); 
-    } else {
-      setScore((s) => s + 1);
-    }
+    setScore((s) => s + 1);
 
     if (collect.current) {
       collect.current.currentTime = 0;
@@ -305,11 +252,7 @@ export default function App() {
       footsteps.current.play().catch((e) => console.log(e));
     }
 
-    setCurrentItem({
-      type: getRandomItemType(),
-      position: getRandomSpawnPosition(),
-      id: Date.now()
-    });
+    setFishPosition(getRandomSpawnPosition());
   };
 
   const stopGame = () => {
@@ -326,28 +269,23 @@ export default function App() {
 
   return (
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", backgroundColor: "#0b0f19" }}>
-
+      
+      {/* RESTORED INTRO PAGE */}
       {!isARActive && (
-        <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "20vh", color: "white" }}>
-          <h1 style={{ fontSize: "40px", marginBottom: "10px" }}>ICY AR</h1>
+        <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "25vh", color: "white", fontFamily: "sans-serif" }}>
+          <h1 style={{ fontSize: "42px", letterSpacing: "2px", marginBottom: "10px" }}>ICY AR</h1>
           <p style={{ fontSize: "18px", opacity: 0.8 }}>An Augmented Reality Experience</p>
         </div>
       )}
 
-      {/* 
-        FIX: The overlay container must ALWAYS be display: "flex". 
-        Never use display: "none" on a WebXR domOverlay root!
-      */}
-      <div 
-        ref={setOverlayElement} 
-        style={{ position: "absolute", zIndex: 10, width: "100%", height: "100%", pointerEvents: "none", display: "flex", flexDirection: "column", justifyContent: "space-between" }}
-      >
-        {/* We now conditionally render the CONTENTS based on isARActive, leaving the parent div intact */}
+      {/* AR HUD VIEW */}
+      {/* FIX: display is ALWAYS 'flex' so the AR session doesn't crash on start */}
+      <div ref={setOverlayElement} style={{ position: "absolute", zIndex: 10, width: "100%", height: "100%", pointerEvents: "none", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         {isARActive && (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "20px", width: "100%", boxSizing: "border-box" }}>
               <div style={{ color: "white", fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
-                Score: {score}
+                Fish: {score}
               </div>
               {gamePosition && !isGameOver && (
                 <div style={{ color: timeLeft <= 5 ? "#e11d48" : "white", fontSize: "28px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
@@ -360,7 +298,7 @@ export default function App() {
             </div>
 
             {!gamePosition && (
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "white", fontSize: "18px", fontWeight: "bold", textAlign: "center", background: "rgba(0,0,0,0.5)", padding: "10px 20px", borderRadius: "10px" }}>
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "white", fontSize: "18px", fontWeight: "bold", textAlign: "center", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.2)", padding: "14px 24px", borderRadius: "30px", width: "80%" }}>
                 Scan the floor and tap the ring to place ICY!
               </div>
             )}
@@ -368,7 +306,7 @@ export default function App() {
             {isGameOver && (
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", zIndex: 50, color: "white", textAlign: "center", padding: "20px", pointerEvents: "auto" }}>
                 <h1 style={{ fontSize: "45px", marginBottom: "10px", textShadow: "2px 2px 10px rgba(0,0,0,1)", color: "#10b981" }}>TIME'S UP!</h1>
-                <p style={{ fontSize: "22px", marginBottom: "10px" }}>Your final score is <b>{score}</b>!</p>
+                <p style={{ fontSize: "22px", marginBottom: "10px" }}>You fed ICY <b>{score}</b> fish!</p>
                 <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{getEndMessage()}</p>
                 <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
                   Play Again
@@ -379,7 +317,7 @@ export default function App() {
         )}
       </div>
 
-      {overlayElement && (
+      {overlayElement && !isARActive && (
         <ARButton
           sessionInit={{ requiredFeatures: ["hit-test"], optionalFeatures: ["dom-overlay"], domOverlay: { root: overlayElement } }}
           onClick={() => { if (ambience.current) ambience.current.play().catch(e => console.log(e)); }}
@@ -388,25 +326,22 @@ export default function App() {
       )}
 
       <Canvas style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
-        {/* XR must be the outermost wrapper so the WebXR session never gets unmounted */}
         <XR>
-          {/* Suspense goes INSIDE XR to pause only the models, not the AR session */}
           <Suspense fallback={null}>
             <XRTracker onXRStart={setIsARActive} />
             {isARActive && (
               <>
                 <ambientLight intensity={2.5} />
-                
-                {/* The ring is ALWAYS rendered, but becomes invisible on tap */}
-                <Reticle onPlace={setGamePosition} isPlaced={!!gamePosition} />
-                
-                {/* The game is ALWAYS rendered, but is invisible until the ring is tapped */}
-                <group position={gamePosition || [0, -10, 0]} visible={!!gamePosition}>
-                  <IceFloe />
-                  <Penguin />
-                  <GameItem item={currentItem} onCollect={collectItem} />
-                  <IceParticles trigger={particleTrigger} />
-                </group>
+                {!gamePosition ? (
+                  <Reticle onPlace={setGamePosition} />
+                ) : (
+                  <group position={gamePosition}>
+                    <IceFloe />
+                    <Penguin />
+                    {!isGameOver && <Fish position={fishPosition} onCollect={collectFish} />}
+                    <IceParticles trigger={particleTrigger} />
+                  </group>
+                )}
               </>
             )}
           </Suspense>
