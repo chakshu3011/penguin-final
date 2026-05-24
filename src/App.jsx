@@ -2,7 +2,7 @@ import "./App.css";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { XR, ARButton, Interactive, useHitTest, useXR } from "@react-three/xr";
 import { useGLTF, useAnimations } from "@react-three/drei";
-import { useRef, useEffect, useState, Suspense, useMemo } from "react";
+import { useRef, useEffect, useState, Suspense } from "react";
 import * as THREE from "three";
 
 function XRTracker({ onXRStart }) {
@@ -15,15 +15,15 @@ function XRTracker({ onXRStart }) {
 
 const getRandomSpawnPosition = () => {
   const angle = Math.random() * Math.PI * 2;
-  const radius = 0.5 + Math.random() * 0.6; // Stays safely within the ice floe radius
+  const radius = 0.5 + Math.random() * 0.6; 
   return [Math.cos(angle) * radius, 0.05, Math.sin(angle) * radius];
 };
 
 const getRandomItemType = () => {
   const random = Math.random();
-  if (random < 0.60) return "fish";    // 60% Occurrence
-  if (random < 0.95) return "krill";   // 35% Occurrence
-  return "plastic";                    // Exactly 5% Occurrence
+  if (random < 0.60) return "fish";    // 60%
+  if (random < 0.95) return "krill";   // 35%
+  return "plastic";                    // 5%
 };
 
 // ==========================================
@@ -89,14 +89,15 @@ function IceParticles({ trigger }) {
 }
 
 // ==========================================
-// 2. TARGET RETICLE
+// 2. TARGET RETICLE (FIXED NULL CRASH)
 // ==========================================
 function Reticle({ onPlace }) {
   const reticleRef = useRef();
   const { camera } = useThree();
 
   useHitTest((hitMatrix, hit) => {
-    if (hit) {
+    // CRITICAL FIX: Added 'reticleRef.current' check to prevent AR camera fatal crashes on unmount
+    if (hit && reticleRef.current) {
       hitMatrix.decompose(
         reticleRef.current.position,
         reticleRef.current.quaternion,
@@ -107,6 +108,9 @@ function Reticle({ onPlace }) {
 
   return (
     <Interactive onSelect={() => {
+      // Safety check inside select action
+      if (!reticleRef.current) return;
+
       const spawnPos = reticleRef.current.position.clone();
       const dirX = spawnPos.x - camera.position.x;
       const dirZ = spawnPos.z - camera.position.z;
@@ -163,52 +167,65 @@ function Penguin() {
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
 
-// Unified, secure interactable component utilizing the scene-cloning pattern
-function GameItem({ item, onCollect }) {
-  const ref = useRef();
-  
-  const fish = useGLTF("/models/fish.glb");
-  const krill = useGLTF("/models/krill_antartic.glb");
-  const plastic = useGLTF("/models/plastic_water_bottle.glb");
-
-  // 1. Determine active GLTF source bundle cleanly
-  const activeGLTF = useMemo(() => {
-    if (item.type === "krill") return krill;
-    if (item.type === "plastic") return plastic;
-    return fish;
-  }, [item.type, fish, krill, plastic]);
-
-  // 2. Clone the active scene graph instance to shield the global asset cache
-  const clonedScene = useMemo(() => {
-    return activeGLTF.scene.clone();
-  }, [activeGLTF]);
-
-  // 3. Bind animations directly onto the local component reference wrapper
-  const { actions, names } = useAnimations(activeGLTF.animations, ref);
+// Visibility Controlled Sub-models (Prevents GPU Memory Leaks)
+function FishModel({ visible }) {
+  const group = useRef();
+  const { scene, animations } = useGLTF("/models/fish.glb");
+  const { actions, names } = useAnimations(animations, group);
 
   useEffect(() => {
     if (names && names.length > 0 && actions[names[0]]) {
       actions[names[0]].reset().play();
     }
-    return () => {
-      if (names && names.length > 0 && actions[names[0]]) {
-        actions[names[0]].stop();
-      }
-    };
-  }, [actions, names, item.type]);
+  }, [actions, names]);
+
+  return (
+    <group ref={group} visible={visible}>
+      <primitive object={scene} scale={0.004} position={[0, 0.1, 0]} dispose={null} />
+    </group>
+  );
+}
+
+function KrillModel({ visible }) {
+  const group = useRef();
+  const { scene, animations } = useGLTF("/models/krill_antartic.glb");
+  const { actions, names } = useAnimations(animations, group);
+
+  useEffect(() => {
+    if (names && names.length > 0 && actions[names[0]]) {
+      actions[names[0]].reset().play();
+    }
+  }, [actions, names]);
+
+  return (
+    <group ref={group} visible={visible}>
+      <primitive object={scene} scale={0.0075} position={[0, 0.05, 0]} dispose={null} />
+    </group>
+  );
+}
+
+function PlasticModel({ visible }) {
+  const { scene } = useGLTF("/models/plastic_water_bottle.glb");
+  return (
+    <group visible={visible}>
+      <primitive object={scene} scale={0.15} position={[0, 0.05, 0]} dispose={null} />
+    </group>
+  );
+}
+
+function GameItem({ item, onCollect }) {
+  const ref = useRef();
 
   useFrame(() => {
     if (ref.current) ref.current.rotation.y += 0.02;
   });
 
-  // Structural mapping adjustments based on object scale variants
-  const scale = item.type === "krill" ? 0.0075 : item.type === "plastic" ? 0.15 : 0.004;
-  const yOffset = item.type === "fish" ? 0.1 : 0.05;
-
   return (
     <Interactive onSelect={onCollect}>
       <group ref={ref} position={item.position}>
-        <primitive object={clonedScene} scale={scale} position={[0, yOffset, 0]} dispose={null} />
+        <FishModel visible={item.type === "fish"} />
+        <KrillModel visible={item.type === "krill"} />
+        <PlasticModel visible={item.type === "plastic"} />
       </group>
     </Interactive>
   );
@@ -230,7 +247,7 @@ export default function App() {
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60); // 1-Minute Target Round Duration
+  const [timeLeft, setTimeLeft] = useState(60); 
   const [isGameOver, setIsGameOver] = useState(false);
 
   const ambience = useRef(null);
@@ -317,7 +334,6 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", backgroundColor: "#0b0f19" }}>
 
-      {/* INTRO PAGE */}
       {!isARActive && (
         <div style={{ position: "absolute", zIndex: 5, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "20vh", color: "white" }}>
           <h1 style={{ fontSize: "40px", marginBottom: "10px" }}>ICY AR</h1>
@@ -325,7 +341,6 @@ export default function App() {
         </div>
       )}
 
-      {/* AR HUD VIEW */}
       <div ref={setOverlayElement} style={{ position: "absolute", zIndex: 10, width: "100%", height: "100%", pointerEvents: "none", display: isARActive ? "flex" : "none", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", justifyContent: "space-between", padding: "20px", width: "100%", boxSizing: "border-box" }}>
           <div style={{ color: "white", fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
@@ -380,15 +395,7 @@ export default function App() {
                   <group position={gamePosition}>
                     <IceFloe />
                     <Penguin />
-                    
-                    {!isGameOver && (
-                      <GameItem 
-                        key={currentItem.id} 
-                        item={currentItem} 
-                        onCollect={collectItem} 
-                      />
-                    )}
-                    
+                    {!isGameOver && <GameItem item={currentItem} onCollect={collectItem} />}
                     <IceParticles trigger={particleTrigger} />
                   </group>
                 </Suspense>
