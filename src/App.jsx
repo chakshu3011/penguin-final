@@ -22,9 +22,9 @@ const getRandomSpawnPosition = () => {
 // FIX: Weighted probability spawn
 const getRandomItemType = () => {
   const rand = Math.random() * 100;
-  if (rand < 70) return "fish";     // 70% chance (60% + 10% to complete 100%)
-  if (rand < 95) return "krill";    // 25% chance
-  return "plastic";                 // 5% chance
+  if (rand < 60) return "fish";     // 60% chance
+  if (rand < 90) return "krill";    // 30% chance
+  return "plastic";                 // 10% chance
 };
 
 // ==========================================
