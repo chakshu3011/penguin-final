@@ -334,36 +334,48 @@ export default function App() {
         </div>
       )}
 
-      <div ref={setOverlayElement} style={{ position: "absolute", zIndex: 10, width: "100%", height: "100%", pointerEvents: "none", display: isARActive ? "flex" : "none", flexDirection: "column", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "20px", width: "100%", boxSizing: "border-box" }}>
-          <div style={{ color: "white", fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
-            Score: {score}
-          </div>
-          {gamePosition && !isGameOver && (
-            <div style={{ color: timeLeft <= 5 ? "#e11d48" : "white", fontSize: "28px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
-              00:{timeLeft.toString().padStart(2, '0')}
+      {/* 
+        FIX: The overlay container must ALWAYS be display: "flex". 
+        Never use display: "none" on a WebXR domOverlay root!
+      */}
+      <div 
+        ref={setOverlayElement} 
+        style={{ position: "absolute", zIndex: 10, width: "100%", height: "100%", pointerEvents: "none", display: "flex", flexDirection: "column", justifyContent: "space-between" }}
+      >
+        {/* We now conditionally render the CONTENTS based on isARActive, leaving the parent div intact */}
+        {isARActive && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "20px", width: "100%", boxSizing: "border-box" }}>
+              <div style={{ color: "white", fontSize: "24px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
+                Score: {score}
+              </div>
+              {gamePosition && !isGameOver && (
+                <div style={{ color: timeLeft <= 5 ? "#e11d48" : "white", fontSize: "28px", fontWeight: "bold", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
+                  00:{timeLeft.toString().padStart(2, '0')}
+                </div>
+              )}
+              <button onClick={stopGame} style={{ padding: "10px 20px", fontSize: "14px", fontWeight: "bold", borderRadius: "20px", border: "2px solid white", background: "#e11d48", color: "white", pointerEvents: "auto", cursor: "pointer", maxHeight: "40px" }}>
+                Exit AR
+              </button>
             </div>
-          )}
-          <button onClick={stopGame} style={{ padding: "10px 20px", fontSize: "14px", fontWeight: "bold", borderRadius: "20px", border: "2px solid white", background: "#e11d48", color: "white", pointerEvents: "auto", cursor: "pointer", maxHeight: "40px" }}>
-            Exit AR
-          </button>
-        </div>
 
-        {!gamePosition && (
-          <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "white", fontSize: "18px", fontWeight: "bold", textAlign: "center", background: "rgba(0,0,0,0.5)", padding: "10px 20px", borderRadius: "10px" }}>
-            Scan the floor and tap the ring to place ICY!
-          </div>
-        )}
+            {!gamePosition && (
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "white", fontSize: "18px", fontWeight: "bold", textAlign: "center", background: "rgba(0,0,0,0.5)", padding: "10px 20px", borderRadius: "10px" }}>
+                Scan the floor and tap the ring to place ICY!
+              </div>
+            )}
 
-        {isGameOver && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", zIndex: 50, color: "white", textAlign: "center", padding: "20px", pointerEvents: "auto" }}>
-            <h1 style={{ fontSize: "45px", marginBottom: "10px", textShadow: "2px 2px 10px rgba(0,0,0,1)", color: "#10b981" }}>TIME'S UP!</h1>
-            <p style={{ fontSize: "22px", marginBottom: "10px" }}>Your final score is <b>{score}</b>!</p>
-            <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{getEndMessage()}</p>
-            <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
-              Play Again
-            </button>
-          </div>
+            {isGameOver && (
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", zIndex: 50, color: "white", textAlign: "center", padding: "20px", pointerEvents: "auto" }}>
+                <h1 style={{ fontSize: "45px", marginBottom: "10px", textShadow: "2px 2px 10px rgba(0,0,0,1)", color: "#10b981" }}>TIME'S UP!</h1>
+                <p style={{ fontSize: "22px", marginBottom: "10px" }}>Your final score is <b>{score}</b>!</p>
+                <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{getEndMessage()}</p>
+                <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
+                  Play Again
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
