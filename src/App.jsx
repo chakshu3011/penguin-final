@@ -22,8 +22,8 @@ const getRandomSpawnPosition = () => {
 const getRandomItemType = () => {
   const random = Math.random();
   if (random < 0.60) return "fish";    // 60% Occurrence
-  if (random < 0.95) return "krill";   // 35% Occurrence (balances out the remaining math)
-  return "plastic";                    // Exactly 5% Occurrence (0.95 to 1.0)
+  if (random < 0.95) return "krill";   // 35% Occurrence
+  return "plastic";                    // Exactly 5% Occurrence
 };
 
 // ==========================================
@@ -163,8 +163,8 @@ function Penguin() {
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
 
-// Fixed: Added default animation trigger loop to the fish component
-function FishModel() {
+// Fixed: Controlled purely via visibility parameters to stop cache crashes
+function FishModel({ visible }) {
   const group = useRef();
   const { scene, animations } = useGLTF("/models/fish.glb");
   const { actions, names } = useAnimations(animations, group);
@@ -175,10 +175,14 @@ function FishModel() {
     }
   }, [actions, names]);
 
-  return <primitive ref={group} object={scene} scale={0.004} position={[0, 0.1, 0]} dispose={null} />;
+  return (
+    <group ref={group} visible={visible}>
+      <primitive object={scene} scale={0.004} position={[0, 0.1, 0]} dispose={null} />
+    </group>
+  );
 }
 
-function KrillModel() {
+function KrillModel({ visible }) {
   const group = useRef();
   const { scene, animations } = useGLTF("/models/krill_antartic.glb");
   const { actions, names } = useAnimations(animations, group);
@@ -189,12 +193,20 @@ function KrillModel() {
     }
   }, [actions, names]);
 
-  return <primitive ref={group} object={scene} scale={0.0075} position={[0, 0.05, 0]} dispose={null} />;
+  return (
+    <group ref={group} visible={visible}>
+      <primitive object={scene} scale={0.0075} position={[0, 0.05, 0]} dispose={null} />
+    </group>
+  );
 }
 
-function PlasticModel() {
+function PlasticModel({ visible }) {
   const { scene } = useGLTF("/models/plastic_water_bottle.glb");
-  return <primitive object={scene} scale={0.15} position={[0, 0.05, 0]} dispose={null} />;
+  return (
+    <group visible={visible}>
+      <primitive object={scene} scale={0.15} position={[0, 0.05, 0]} dispose={null} />
+    </group>
+  );
 }
 
 function GameItem({ item, onCollect }) {
@@ -207,9 +219,10 @@ function GameItem({ item, onCollect }) {
   return (
     <Interactive onSelect={onCollect}>
       <group ref={ref} position={item.position}>
-        {item.type === "fish" && <FishModel />}
-        {item.type === "krill" && <KrillModel />}
-        {item.type === "plastic" && <PlasticModel />}
+        {/* All items remain mounted, avoiding unmount disposal errors entirely */}
+        <FishModel visible={item.type === "fish"} />
+        <KrillModel visible={item.type === "krill"} />
+        <PlasticModel visible={item.type === "plastic"} />
       </group>
     </Interactive>
   );
@@ -223,7 +236,6 @@ export default function App() {
   const [overlayElement, setOverlayElement] = useState(null);
   const [gamePosition, setGamePosition] = useState(null);
   
-  // Fixed: Added unique ID to avoid item state synchronization cache issues
   const [currentItem, setCurrentItem] = useState({ 
     type: "fish", 
     position: [0.4, 0.05, 0.4],
@@ -232,7 +244,7 @@ export default function App() {
   const [particleTrigger, setParticleTrigger] = useState({ id: null, pos: [0, 0, 0] });
 
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60); // 1 Minute Timer
+  const [timeLeft, setTimeLeft] = useState(60); 
   const [isGameOver, setIsGameOver] = useState(false);
 
   const ambience = useRef(null);
@@ -283,7 +295,7 @@ export default function App() {
     setParticleTrigger({ id: Date.now(), pos: [...currentItem.position] });
 
     if (currentItem.type === "plastic") {
-      setScore((s) => Math.max(0, s - 2)); // Subtract points for plastic collection
+      setScore((s) => Math.max(0, s - 2)); 
     } else {
       setScore((s) => s + 1);
     }
@@ -297,7 +309,6 @@ export default function App() {
       footsteps.current.play().catch((e) => console.log(e));
     }
 
-    // Fixed: Assigns a fully unique ID stamp on item generation reset
     setCurrentItem({
       type: getRandomItemType(),
       position: getRandomSpawnPosition(),
@@ -384,10 +395,8 @@ export default function App() {
                     <IceFloe />
                     <Penguin />
                     
-                    {/* Fixed: Unique key explicitly mapping item identification updates */}
                     {!isGameOver && (
                       <GameItem 
-                        key={currentItem.id} 
                         item={currentItem} 
                         onCollect={collectItem} 
                       />
