@@ -23,7 +23,7 @@ const getRandomSpawnPosition = () => {
 const getRandomItemType = () => {
   const rand = Math.random() * 100;
   if (rand < 60) return "fish";     // 60% chance
-  if (rand < 90) return "krill";    // 30% chance
+  if (rand < 90) return "squid";    // 30% chance
   return "plastic";                 // 10% chance
 };
 
@@ -137,7 +137,7 @@ function Reticle({ onPlace }) {
 // ==========================================
 useGLTF.preload("/models/penguin.glb");
 useGLTF.preload("/models/fish.glb");
-useGLTF.preload("/models/krill.glb");
+useGLTF.preload("/models/squid.glb");
 useGLTF.preload("/models/plastic.glb");
 useGLTF.preload("/models/ice_floe.glb");
 
@@ -203,10 +203,10 @@ function Fish({ position, onCollect }) {
   );
 }
 
-function Krill({ position, onCollect }) {
+function Squid({ position, onCollect }) {
   const group = useRef();
-  const krill = useGLTF("/models/krill.glb");
-  const { actions, names } = useAnimations(krill.animations, group);
+  const squid = useGLTF("/models/squid.glb");
+  const { actions, names } = useAnimations(squid.animations, group);
 
   useEffect(() => {
     if (names && names.length > 0) {
@@ -220,7 +220,7 @@ function Krill({ position, onCollect }) {
   return (
     <Interactive onSelect={onCollect}>
       <group ref={group} position={position}>
-        <primitive object={krill.scene} scale={2} position={[0, 0.05, 0]} />
+        <primitive object={squid.scene} scale={2} position={[0, 0.05, 0]} />
       </group>
     </Interactive>
   );
@@ -255,7 +255,7 @@ export default function App() {
 
   const [score, setScore] = useState(0);
   const [fishCount, setFishCount] = useState(0);
-  const [krillCount, setKrillCount] = useState(0);
+  const [squidCount, setSquidCount] = useState(0);
   
   // FIX: Increased to 60 seconds
   const [timeLeft, setTimeLeft] = useState(60);
@@ -349,11 +349,11 @@ export default function App() {
         setGameStatus("win");
         return;
       }
-    } else if (currentItem === "krill") {
-      const newKrillCount = krillCount + 1;
-      setKrillCount(newKrillCount);
+    } else if (currentItem === "squid") {
+      const newSquidCount = squidCount + 1;
+      setSquidCount(newSquidCount);
       setScore((s) => s + 2); 
-      if (newKrillCount >= 5) {
+      if (newSquidCount >= 5) {
         setGameStatus("win");
         return;
       }
@@ -389,7 +389,7 @@ export default function App() {
           <div style={{ marginTop: "40px", padding: "20px", background: "rgba(255,255,255,0.1)", borderRadius: "15px", border: "1px solid rgba(255,255,255,0.3)", textAlign: "center", width: "80%", maxWidth: "350px" }}>
             <h3 style={{ margin: "0 0 10px 0", color: "#60a5fa" }}>How to Play</h3>
             <p style={{ margin: "5px 0", fontSize: "15px" }}>🐟 Collect <b>10 Fish</b> OR</p>
-            <p style={{ margin: "5px 0", fontSize: "15px" }}>🦐 Collect <b>5 Krill</b> to win!</p>
+            <p style={{ margin: "5px 0", fontSize: "15px" }}>🦑 Collect <b>5 Squid</b> to win!</p>
             <hr style={{ border: "0.5px solid rgba(255,255,255,0.2)", margin: "10px 0" }} />
             <p style={{ margin: "5px 0", fontSize: "15px", color: "#fb7185" }}>⚠️ <b>AVOID PLASTIC!</b></p>
             <p style={{ margin: "0", fontSize: "13px", opacity: 0.7 }}>(If plastic appears, wait 5s for it to vanish)</p>
@@ -424,7 +424,7 @@ export default function App() {
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", zIndex: 50, color: "white", textAlign: "center", padding: "20px", pointerEvents: "auto" }}>
                 <h1 style={{ fontSize: "45px", marginBottom: "10px", textShadow: "2px 2px 10px rgba(0,0,0,1)", color: endData.color }}>{endData.title}</h1>
                 <p style={{ fontSize: "22px", marginBottom: "10px" }}>Final Score: <b>{score}</b></p>
-                <p style={{ fontSize: "16px", marginBottom: "10px", color: "#d1d5db" }}>Fish: {fishCount}/10 | Krill: {krillCount}/5</p>
+                <p style={{ fontSize: "16px", marginBottom: "10px", color: "#d1d5db" }}>Fish: {fishCount}/10 | Squid: {squidCount}/5</p>
                 <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "40px", color: "#60a5fa" }}>{endData.msg}</p>
                 <button onClick={stopGame} style={{ padding: "15px 35px", fontSize: "18px", fontWeight: "bold", borderRadius: "30px", border: "none", background: "#2B4BAA", color: "white", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.5)" }}>
                   Play Again
@@ -470,7 +470,7 @@ export default function App() {
                     <IceFloe />
                     <Penguin walkTarget={penguinWalkTarget} />
                     {gameStatus === "playing" && currentItem === "fish" && <Fish position={itemPosition} onCollect={collectItem} />}
-                    {gameStatus === "playing" && currentItem === "krill" && <Krill position={itemPosition} onCollect={collectItem} />}
+                    {gameStatus === "playing" && currentItem === "squid" && <Squid position={itemPosition} onCollect={collectItem} />}
                     {gameStatus === "playing" && currentItem === "plastic" && <Plastic position={itemPosition} onCollect={collectItem} />}
                     <IceParticles trigger={particleTrigger} />
                   </group>
