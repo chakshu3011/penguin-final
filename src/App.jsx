@@ -21,9 +21,10 @@ const getRandomSpawnPosition = () => {
 
 const getRandomItemType = () => {
   const random = Math.random();
-  if (random < 0.60) return "fish";    // 60%
-  if (random < 0.95) return "krill";   // 35%
-  return "plastic";                    // 5%
+  // Math must equal 100%. 60% Fish, 35% Krill, 5% Plastic.
+  if (random < 0.60) return "fish";    
+  if (random < 0.95) return "krill";   
+  return "plastic";                    
 };
 
 // ==========================================
@@ -89,14 +90,14 @@ function IceParticles({ trigger }) {
 }
 
 // ==========================================
-// 2. TARGET RETICLE (PERMANENTLY MOUNTED)
+// 2. TARGET RETICLE (SAFE MOUNTING)
 // ==========================================
 function Reticle({ onPlace, isPlaced }) {
   const reticleRef = useRef();
   const { camera } = useThree();
 
   useHitTest((hitMatrix, hit) => {
-    // Only calculate physics if the game hasn't been placed yet
+    // Stops calculating hits once placed to save processing power
     if (hit && reticleRef.current && !isPlaced) {
       hitMatrix.decompose(
         reticleRef.current.position,
@@ -108,7 +109,6 @@ function Reticle({ onPlace, isPlaced }) {
 
   return (
     <Interactive onSelect={() => {
-      // Ignore clicks if already placed or if camera hasn't found a floor
       if (isPlaced || !reticleRef.current) return;
 
       const spawnPos = reticleRef.current.position.clone();
@@ -124,7 +124,7 @@ function Reticle({ onPlace, isPlaced }) {
 
       onPlace(spawnPos);
     }}>
-      {/* Reticle stays in memory but becomes invisible once placed */}
+      {/* Reticle becomes invisible instead of deleting, preventing camera crashes */}
       <mesh ref={reticleRef} rotation={[-Math.PI / 2, 0, 0]} visible={!isPlaced}>
         <ringGeometry args={[0.15, 0.2, 32]} />
         <meshStandardMaterial color="white" />
@@ -162,7 +162,7 @@ function Penguin() {
   return <primitive ref={group} object={penguin.scene} scale={0.4} position={[0, 0, 0]} />;
 }
 
-// Visibility Controlled Sub-models
+// Sub-models use "visible" property so they don't crash the GPU when swapping
 function FishModel({ visible }) {
   const group = useRef();
   const { scene, animations } = useGLTF("/models/fish.glb");
@@ -208,7 +208,7 @@ function PlasticModel({ visible }) {
   );
 }
 
-function GameItem({ item, onCollect, visible }) {
+function GameItem({ item, onCollect }) {
   const ref = useRef();
 
   useFrame(() => {
@@ -216,11 +216,8 @@ function GameItem({ item, onCollect, visible }) {
   });
 
   return (
-    <Interactive onSelect={() => {
-      // Only allow collection if the game is actively showing the item
-      if (visible) onCollect();
-    }}>
-      <group ref={ref} position={item.position} visible={visible}>
+    <Interactive onSelect={onCollect}>
+      <group ref={ref} position={item.position}>
         <FishModel visible={item.type === "fish"} />
         <KrillModel visible={item.type === "krill"} />
         <PlasticModel visible={item.type === "plastic"} />
@@ -380,24 +377,27 @@ export default function App() {
         />
       )}
 
+      {/* RESTORED TO THE SAFE RENDERING STRUCTURE */}
       <Canvas style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
         <XR>
           <XRTracker onXRStart={setIsARActive} />
           {isARActive && (
-            // CRITICAL ARCHITECTURE CHANGE: Suspense wraps everything to load models BEFORE the tap. 
-            // The models are now constantly mounted, avoiding all unmount crashes.
-            <Suspense fallback={null}>
+            <>
               <ambientLight intensity={2.5} />
-              
               <Reticle onPlace={setGamePosition} isPlaced={!!gamePosition} />
               
-              <group visible={!!gamePosition} position={gamePosition || [0, 0, 0]}>
-                <IceFloe />
-                <Penguin />
-                <GameItem item={currentItem} onCollect={collectItem} visible={!isGameOver} />
-                <IceParticles trigger={particleTrigger} />
-              </group>
-            </Suspense>
+              {/* Suspense is safely tucked away so it doesn't crash the camera boot sequence */}
+              {gamePosition && (
+                <Suspense fallback={null}>
+                  <group position={gamePosition}>
+                    <IceFloe />
+                    <Penguin />
+                    {!isGameOver && <GameItem item={currentItem} onCollect={collectItem} />}
+                    <IceParticles trigger={particleTrigger} />
+                  </group>
+                </Suspense>
+              )}
+            </>
           )}
         </XR>
       </Canvas>
